@@ -40,6 +40,7 @@ Minara-Master-Plan):
 | 3 | [Student Journey & Core Platform Workflows](./milestones/milestone-3-student-journey-core-workflows/README.md) | Draft |
 | 4 | [Information Architecture & User Experience](./milestones/milestone-4-information-architecture/README.md) | Draft |
 | 5 | [Domain Model & Data Architecture](./milestones/milestone-5-domain-model-data-architecture/README.md) | Draft |
-| 6 | *(Not yet started)* | — |
+| 6 | [Technical Architecture & System Design](./milestones/milestone-6-technical-architecture/README.md) | Draft |
+| 7 | *(Not yet started)* | — |
 
-Milestone 6 will begin only after Milestone 5 is reviewed and approved.
+Milestone 7 will begin only after Milestone 6 is reviewed and approved.
