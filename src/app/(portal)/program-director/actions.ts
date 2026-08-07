@@ -5,8 +5,8 @@ import { requireSessionUserWithRole, hasRoleForProgram } from "@/services/identi
 import { getGradeForApproval, approveGrade, rejectGrade } from "@/services/gradebook/gradebook";
 import {
   type ContentType,
-  getLessonForReview,
-  getAssessmentForReview,
+  getLessonVersionForReview,
+  getAssessmentVersionForReview,
   approveContent,
   returnContentToDraft,
   ContentStateError,
@@ -20,7 +20,7 @@ async function assertProgramDirectorOwnsGrade(gradeId: string, userId: string) {
   if (user.id !== userId) throw new Error("Session mismatch.");
 
   const isAdministrator = user.roleAssignments.some((ra) => ra.role === "ADMINISTRATOR");
-  const programId = grade.submission.assessment.course.programId;
+  const programId = grade.submission.assessmentVersion.assessment.course.programId;
   if (!isAdministrator && !hasRoleForProgram(user, "PROGRAM_DIRECTOR", programId)) {
     throw new Error("You do not oversee the Program this grade belongs to.");
   }
@@ -53,23 +53,29 @@ export async function rejectGradeAction(gradeId: string, _formData: FormData): P
   revalidatePath(`/program-director/approvals/${gradeId}`);
 }
 
-// ── Content review — Milestone 13 (Curriculum Delivery Vertical Slice) ─────
+// ── Content review — Milestone 13/14 (Curriculum Delivery Vertical
+// Slice, Content Versioning Vertical Slice) ─────────────────────────────
 //
 // "Curriculum Committee Review" in Milestone 11's fuller design is held
 // here, by the existing Program Director Role — see
 // docs/milestones/milestone-11-curriculum-management-content-engine/05-publishing-workflow.md#no-new-role-curriculum-committee-review-uses-existing-authority.
-// No new RBAC Role is introduced, per this milestone's constraint.
+// No new RBAC Role is introduced, per this milestone's constraint. Every
+// action below is scoped to a specific Version id (Milestone 14) rather
+// than a Lesson/Assessment id directly (Milestone 13) — the review
+// target is unambiguously "this Version," never "whatever this Lesson's
+// latest version happens to be" once more than one version can exist.
 
-async function assertProgramDirectorOwnsContent(contentType: ContentType, contentId: string) {
+async function assertProgramDirectorOwnsContent(contentType: ContentType, versionId: string) {
   const content =
     contentType === "LESSON"
-      ? await getLessonForReview(contentId)
-      : await getAssessmentForReview(contentId);
+      ? await getLessonVersionForReview(versionId)
+      : await getAssessmentVersionForReview(versionId);
   if (!content) throw new Error("Content not found.");
 
   const user = await requireSessionUserWithRole("PROGRAM_DIRECTOR");
   const isAdministrator = user.roleAssignments.some((ra) => ra.role === "ADMINISTRATOR");
-  const programId = content.course.programId;
+  const programId =
+    "lesson" in content ? content.lesson.course.programId : content.assessment.course.programId;
   if (!isAdministrator && !hasRoleForProgram(user, "PROGRAM_DIRECTOR", programId)) {
     throw new Error("You do not oversee the Program this content belongs to.");
   }
@@ -83,20 +89,20 @@ async function assertProgramDirectorOwnsContent(contentType: ContentType, conten
  */
 export async function approveContentAction(
   contentType: ContentType,
-  contentId: string,
+  versionId: string,
   _formData: FormData,
 ): Promise<void> {
-  const { user } = await assertProgramDirectorOwnsContent(contentType, contentId);
+  const { user } = await assertProgramDirectorOwnsContent(contentType, versionId);
 
   try {
-    await approveContent(contentType, contentId, user.id);
+    await approveContent(contentType, versionId, user.id);
   } catch (error) {
     if (error instanceof ContentStateError) throw new Error(error.message);
     throw error;
   }
 
   revalidatePath("/program-director/content");
-  revalidatePath(`/program-director/content/${contentType.toLowerCase()}s/${contentId}`);
+  revalidatePath(`/program-director/content/${contentType.toLowerCase()}s/${versionId}`);
 }
 
 export interface ReturnContentState {
@@ -112,23 +118,23 @@ export interface ReturnContentState {
  */
 export async function returnContentToDraftAction(
   contentType: ContentType,
-  contentId: string,
+  versionId: string,
   _prevState: ReturnContentState,
   formData: FormData,
 ): Promise<ReturnContentState> {
-  const { user } = await assertProgramDirectorOwnsContent(contentType, contentId);
+  const { user } = await assertProgramDirectorOwnsContent(contentType, versionId);
 
   const reason = String(formData.get("reason") ?? "").trim();
   if (!reason) return { error: "A reason is required when returning content for revision." };
 
   try {
-    await returnContentToDraft(contentType, contentId, reason, user.id);
+    await returnContentToDraft(contentType, versionId, reason, user.id);
   } catch (error) {
     if (error instanceof ContentStateError) return { error: error.message };
     throw error;
   }
 
   revalidatePath("/program-director/content");
-  revalidatePath(`/program-director/content/${contentType.toLowerCase()}s/${contentId}`);
+  revalidatePath(`/program-director/content/${contentType.toLowerCase()}s/${versionId}`);
   return { success: true };
 }

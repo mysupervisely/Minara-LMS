@@ -34,10 +34,13 @@ export default async function StudentGradesPage() {
             <tbody>
               {grades.map((grade) => (
                 <tr key={grade.id}>
-                  <td>{grade.submission.assessment.course.title}</td>
-                  <td>{grade.submission.assessment.title}</td>
+                  <td>{grade.submission.assessmentVersion.assessment.course.title}</td>
                   <td>
-                    {grade.score} / {grade.submission.assessment.maxScore}
+                    {grade.submission.assessmentVersion.title}{" "}
+                    <span className="muted">v{grade.submission.assessmentVersion.versionNumber}</span>
+                  </td>
+                  <td>
+                    {grade.score} / {grade.submission.assessmentVersion.maxScore}
                   </td>
                   <td>{grade.feedback ?? "—"}</td>
                 </tr>

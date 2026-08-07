@@ -17,8 +17,18 @@
  * Director and Administrator (the same service functions the real
  * portal screens use), and one Grade is carried all the way to
  * Approved — so a freshly seeded database demonstrates the full
- * Curriculum Delivery Vertical Slice lifecycle out of the box, not just
- * its Draft state.
+ * Curriculum Delivery Vertical Slice lifecycle out of the box.
+ *
+ * Milestone 14 update: every Lesson/Assessment created below is now a
+ * Lesson/Assessment *identity* plus its first Version — createLesson/
+ * createAssessment return `{ lesson, version }` /
+ * `{ assessment, version }`. The seed additionally walks Lesson 1
+ * through this milestone's exact "critical demonstration": the Student
+ * completes Version 1, Faculty then drafts and publishes Version 2, and
+ * the Student's Version 1 completion remains on record, untouched, even
+ * though Version 2 is now what the Course delivers — so a freshly
+ * seeded database proves "a published educational record can evolve
+ * without rewriting history" out of the box, not only under test.
  *
  * Run with: npm run db:seed
  * Safe to re-run against an empty database; not idempotent against a
@@ -36,9 +46,11 @@ import {
   createCourse,
   createCourseOffering,
   createLesson,
+  createNewLessonVersion,
+  updateLessonVersionDraft,
 } from "../src/services/academic/institution";
 import { createAssessment, submitAssessment } from "../src/services/assessments/assessments";
-import { createEnrollment } from "../src/services/enrollment/enrollment";
+import { createEnrollment, markLessonComplete } from "../src/services/enrollment/enrollment";
 import { createCompetency } from "../src/services/academic/competency";
 import {
   submitContentForReview,
@@ -133,7 +145,7 @@ async function main() {
     admin.id,
   );
 
-  const lesson1 = await createLesson(
+  const { lesson: lesson1, version: lesson1v1 } = await createLesson(
     {
       courseId: course.id,
       title: "Introduction to Drug Classifications",
@@ -144,7 +156,7 @@ async function main() {
     },
     faculty.id,
   );
-  const lesson2 = await createLesson(
+  const { version: lesson2v1 } = await createLesson(
     {
       courseId: course.id,
       title: "Dosage Calculations",
@@ -155,7 +167,7 @@ async function main() {
     },
     faculty.id,
   );
-  const assessment = await createAssessment(
+  const { assessment, version: assessmentV1 } = await createAssessment(
     {
       courseId: course.id,
       title: "Pharmacology Fundamentals — Quiz 1",
@@ -167,17 +179,17 @@ async function main() {
     faculty.id,
   );
 
-  // Walk each item through Draft → Submitted → Approved → Published,
-  // through the same content-workflow.ts functions the Faculty/Program
-  // Director/Administrator portal screens call.
-  for (const contentId of [lesson1.id, lesson2.id]) {
-    await submitContentForReview("LESSON", contentId, faculty.id);
-    await approveContent("LESSON", contentId, programDirector.id);
-    await publishContent("LESSON", contentId, admin.id);
+  // Walk each Version 1 through Draft → Submitted → Approved →
+  // Published, through the same content-workflow.ts functions the
+  // Faculty/Program Director/Administrator portal screens call.
+  for (const versionId of [lesson1v1.id, lesson2v1.id]) {
+    await submitContentForReview("LESSON", versionId, faculty.id);
+    await approveContent("LESSON", versionId, programDirector.id);
+    await publishContent("LESSON", versionId, admin.id);
   }
-  await submitContentForReview("ASSESSMENT", assessment.id, faculty.id);
-  await approveContent("ASSESSMENT", assessment.id, programDirector.id);
-  await publishContent("ASSESSMENT", assessment.id, admin.id);
+  await submitContentForReview("ASSESSMENT", assessmentV1.id, faculty.id);
+  await approveContent("ASSESSMENT", assessmentV1.id, programDirector.id);
+  await publishContent("ASSESSMENT", assessmentV1.id, admin.id);
 
   // 5. Student — enrolled, then carried through Assessment Submission →
   // Grade Entry → Grade Approval, so the seeded database demonstrates a
@@ -193,6 +205,12 @@ async function main() {
     { studentId: student.id, programId: program.id, cohortId: cohort.id },
     admin.id,
   );
+
+  // Student completes Lesson 1's Version 1 *before* Version 2 exists —
+  // this ordering matters, it is what makes the demo below a genuine
+  // "historical activity predates the new version" scenario rather
+  // than a coincidence.
+  await markLessonComplete({ studentId: student.id, lessonId: lesson1.id });
 
   const submission = await submitAssessment({
     assessmentId: assessment.id,
@@ -211,12 +229,34 @@ async function main() {
   await submitGradeForApproval(grade.id, faculty.id);
   await approveGrade(grade.id, programDirector.id);
 
+  // 6. Milestone 14's critical demonstration, seeded directly: Faculty
+  // drafts a Version 2 of Lesson 1 (a copy of Version 1's content,
+  // lightly revised), which goes through the identical Draft →
+  // Submitted → Approved → Published cycle and becomes the new
+  // publishedVersionId. Version 1 — including the Student's completion
+  // of it above — is never modified.
+  const lesson1v2 = await createNewLessonVersion(lesson1.id, faculty.id);
+  await updateLessonVersionDraft({
+    versionId: lesson1v2.id,
+    title: lesson1v2.title,
+    content: `${lesson1v2.content}\n\nUpdate: added a note on high-alert medication classifications.`,
+    competencyIds: [competency.id],
+  });
+  await submitContentForReview("LESSON", lesson1v2.id, faculty.id);
+  await approveContent("LESSON", lesson1v2.id, programDirector.id);
+  await publishContent("LESSON", lesson1v2.id, admin.id);
+
   console.log("Seed complete. Demo accounts (all use the same password):\n");
   console.log(`  Administrator     admin@minara.edu`);
   console.log(`  Faculty           faculty@minara.edu`);
   console.log(`  Program Director  director@minara.edu`);
   console.log(`  Student           student@minara.edu`);
   console.log(`  Password (all)    ${DEMO_PASSWORD}\n`);
+  console.log(
+    "Lesson 1 now has two Versions — v1 (Published, completed by the Student before v2 existed) " +
+      "and v2 (Published, now the live version delivered to Students; the Student has not yet " +
+      "completed it) — demonstrating this milestone's versioning guarantee out of the box.",
+  );
   console.log("Assessment id for manual testing:", assessment.id);
 }
 

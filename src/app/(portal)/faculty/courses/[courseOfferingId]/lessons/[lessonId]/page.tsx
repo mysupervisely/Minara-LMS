@@ -2,20 +2,36 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { requireSessionUserWithRole } from "@/services/identity/authorization";
-import { facultyCanAccessCourseOffering, getCourseOfferingById } from "@/services/academic/institution";
-import { getLessonForReview } from "@/services/academic/content-workflow";
+import {
+  facultyCanAccessCourseOffering,
+  getCourseOfferingById,
+  getLessonById,
+  getLatestLessonVersion,
+  listLessonVersions,
+} from "@/services/academic/institution";
 import { listCompetenciesForProgram } from "@/services/academic/competency";
 import { ActionForm } from "@/components/action-form";
-import { updateLessonDraftAction, submitLessonForReviewAction } from "../../../../actions";
+import {
+  updateLessonDraftAction,
+  submitLessonForReviewAction,
+  createNewLessonVersionAction,
+} from "../../../../actions";
 
 export const metadata: Metadata = { title: "Lesson" };
 
 /**
- * Faculty "Edit lesson" / "Submit for approval" / "View status"
- * capabilities — Milestone 13. A Draft (or Returned) Lesson is
- * editable here; once Submitted, Approved, or Published it is
- * read-only — per
- * docs/milestones/milestone-12-curriculum-delivery-vertical-slice/02-content-lifecycle-workflow.md.
+ * Faculty "Current published version" / "Create new version" / "Edit
+ * draft version" / "Submit new version for review" / "View version
+ * status" / "See returned version reason" capabilities — Milestone 14.
+ *
+ * The latest LessonVersion is what this page shows and, when Draft,
+ * edits — during an active edit cycle it is unambiguously "the version
+ * being worked on," since createNewLessonVersion refuses to start a
+ * second one while one is already in flight (see that function's
+ * comment). Once the latest version reaches PUBLISHED, this page shows
+ * it read-only and offers "Create New Version" instead of an edit
+ * form — Faculty can never edit a Published version, by construction:
+ * the edit form only ever targets a version whose status is DRAFT.
  */
 export default async function FacultyLessonPage({
   params,
@@ -30,42 +46,56 @@ export default async function FacultyLessonPage({
 
   const [offering, lesson] = await Promise.all([
     getCourseOfferingById(courseOfferingId),
-    getLessonForReview(lessonId),
+    getLessonById(lessonId),
   ]);
   if (!offering || !lesson || lesson.courseId !== offering.course.id) notFound();
 
-  const competencies = await listCompetenciesForProgram(offering.course.program.id);
-  const taggedIds = new Set(lesson.competencies.map((c) => c.id));
+  const [latest, history, competencies] = await Promise.all([
+    getLatestLessonVersion(lessonId),
+    listLessonVersions(lessonId),
+    listCompetenciesForProgram(offering.course.program.id),
+  ]);
+  if (!latest) notFound();
+
+  const taggedIds = new Set(latest.competencies.map((c) => c.id));
+  const isPublishedPointer = lesson.publishedVersionId === latest.id;
 
   const boundUpdate = updateLessonDraftAction.bind(null, lessonId, courseOfferingId);
   const boundSubmit = submitLessonForReviewAction.bind(null, lessonId, courseOfferingId);
+  const boundCreateVersion = createNewLessonVersionAction.bind(null, lessonId, courseOfferingId);
 
   return (
     <div className="stack">
       <p className="muted">
         <Link href={`/faculty/courses/${courseOfferingId}`}>&larr; {offering.course.title}</Link>
       </p>
-      <h1>{lesson.title}</h1>
+      <h1>{latest.title}</h1>
       <p>
-        <span className={`badge badge--${lesson.status.toLowerCase()}`}>{lesson.status}</span>
+        <span className="muted">Version {latest.versionNumber}</span>{" "}
+        <span className={`badge badge--${latest.status.toLowerCase()}`}>{latest.status}</span>
+        {isPublishedPointer ? (
+          <span className="badge badge--approved" style={{ marginLeft: "0.5rem" }}>
+            Currently delivered to Students
+          </span>
+        ) : null}
       </p>
 
-      {lesson.returnReason ? (
+      {latest.returnReason ? (
         <p className="alert alert--error" role="alert">
-          Returned for revision: {lesson.returnReason}
+          Returned for revision: {latest.returnReason}
         </p>
       ) : null}
 
-      {lesson.status === "DRAFT" ? (
+      {latest.status === "DRAFT" ? (
         <>
           <ActionForm action={boundUpdate} submitLabel="Save">
             <div className="field">
               <label htmlFor="title">Title</label>
-              <input id="title" name="title" defaultValue={lesson.title} required />
+              <input id="title" name="title" defaultValue={latest.title} required />
             </div>
             <div className="field">
               <label htmlFor="content">Content</label>
-              <textarea id="content" name="content" rows={8} defaultValue={lesson.content} required />
+              <textarea id="content" name="content" rows={8} defaultValue={latest.content} required />
             </div>
             <fieldset style={{ marginBottom: "1rem" }}>
               <legend>Competencies</legend>
@@ -95,14 +125,55 @@ export default async function FacultyLessonPage({
         </>
       ) : (
         <div className="card">
-          <p style={{ whiteSpace: "pre-wrap" }}>{lesson.content}</p>
-          {lesson.competencies.length > 0 ? (
+          <p style={{ whiteSpace: "pre-wrap" }}>{latest.content}</p>
+          {latest.competencies.length > 0 ? (
             <p className="muted">
-              Competencies: {lesson.competencies.map((c) => c.name).join(", ")}
+              Competencies: {latest.competencies.map((c) => c.name).join(", ")}
             </p>
           ) : null}
         </div>
       )}
+
+      {latest.status === "PUBLISHED" ? (
+        <form action={boundCreateVersion}>
+          <button className="button button--primary" type="submit">
+            Create New Version
+          </button>
+        </form>
+      ) : null}
+
+      <section style={{ padding: 0, border: "none" }}>
+        <h2>Version History</h2>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Version</th>
+                <th scope="col">Status</th>
+                <th scope="col">Created</th>
+                <th scope="col">Published</th>
+              </tr>
+            </thead>
+            <tbody>
+              {history.map((v) => (
+                <tr key={v.id}>
+                  <td>
+                    v{v.versionNumber}
+                    {v.id === lesson.publishedVersionId ? (
+                      <span className="muted"> — live</span>
+                    ) : null}
+                  </td>
+                  <td>
+                    <span className={`badge badge--${v.status.toLowerCase()}`}>{v.status}</span>
+                  </td>
+                  <td>{v.createdAt.toLocaleString()}</td>
+                  <td>{v.publishedAt ? v.publishedAt.toLocaleString() : "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
     </div>
   );
 }

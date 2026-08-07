@@ -124,28 +124,43 @@ export async function createCourseOffering(
   return offering;
 }
 
+/**
+ * Milestone 14: creates a Lesson (the stable identity) and its first
+ * LessonVersion (versionNumber 1, Draft) together, atomically. Every
+ * caller — Faculty authoring, the Administrator foundation screens,
+ * the seed script — goes through this one function, so a Lesson is
+ * never left without at least one Version. See
+ * src/services/academic/content-workflow.ts for the Draft → Submitted
+ * → Approved → Published transitions this first Version then moves
+ * through, and createNewLessonVersion below for how a *second* Version
+ * gets created once the first is Published.
+ */
 export async function createLesson(
   input: {
     courseId: string;
     title: string;
     content: string;
     order?: number;
-    /** Milestone 13: Competencies this Lesson teaches toward, per src/services/academic/competency.ts. Optional at creation — required before submission for review, enforced in content-workflow.ts. */
+    /** Competencies this Lesson Version teaches toward, per src/services/academic/competency.ts. Optional at creation — required before submission for review, enforced in content-workflow.ts. */
     competencyIds?: string[];
   },
   actorId: string,
 ) {
   const lesson = await db.lesson.create({
+    data: { courseId: input.courseId, order: input.order ?? 0 },
+  });
+  const version = await db.lessonVersion.create({
     data: {
-      courseId: input.courseId,
+      lessonId: lesson.id,
+      versionNumber: 1,
       title: input.title,
       content: input.content,
-      order: input.order ?? 0,
       competencies: input.competencyIds?.length
         ? { connect: input.competencyIds.map((id) => ({ id })) }
         : undefined,
     },
   });
+
   await recordAuditEvent({
     actorId,
     action: "LESSON_CREATED",
@@ -153,40 +168,142 @@ export async function createLesson(
     entityId: lesson.id,
     metadata: { title: input.title },
   });
-  return lesson;
+  await recordAuditEvent({
+    actorId,
+    action: "VERSION_CREATED",
+    entityType: "LessonVersion",
+    entityId: version.id,
+    metadata: { lessonId: lesson.id, versionNumber: version.versionNumber },
+  });
+
+  return { lesson, version };
 }
 
 /**
- * Milestone 13: edits a Lesson's content while it is still Draft — the
- * Faculty "Edit lesson" capability. Mirrors the Grade lifecycle's
- * "DRAFT-only editable" rule (src/services/gradebook/gradebook.ts's
- * enterGrade): once Submitted for Review, a Lesson must be Returned
- * before it can be edited again. No separate audit event is emitted
- * for the edit itself — only the lifecycle transitions in
- * content-workflow.ts are audited, per this milestone's Content
- * Lifecycle Workflow document.
+ * Milestone 14: creates LessonVersion N+1 for a Lesson that already
+ * has at least one version, seeded from the latest version's content
+ * and Competency tags as an editable starting point — the "Faculty
+ * creates an edit" step of this milestone's Core Workflow. Refuses to
+ * create a new version while another one is already in flight (any
+ * status other than PUBLISHED), so at most one Draft/Submitted/
+ * Approved version exists per Lesson at a time — a deliberate
+ * simplification that keeps "which version am I editing" unambiguous
+ * for this narrow slice.
  */
-export async function updateLessonDraft(
-  input: {
-    lessonId: string;
-    title: string;
-    content: string;
-    competencyIds: string[];
-  },
-) {
-  const lesson = await db.lesson.findUnique({ where: { id: input.lessonId } });
-  if (!lesson) throw new Error("Lesson not found.");
-  if (lesson.status !== "DRAFT") {
-    throw new Error("Only Draft Lessons can be edited. Submitted, Approved, and Published content is read-only.");
+export async function createNewLessonVersion(lessonId: string, actorId: string) {
+  const versions = await db.lessonVersion.findMany({
+    where: { lessonId },
+    orderBy: { versionNumber: "desc" },
+    include: { competencies: true },
+  });
+  if (versions.length === 0) {
+    throw new Error("This Lesson has no existing version to base a new version on.");
+  }
+  const inFlight = versions.find((v) => v.status !== "PUBLISHED");
+  if (inFlight) {
+    throw new Error(
+      "A version of this Lesson is already in progress — finish or have it returned before creating another.",
+    );
   }
 
-  return db.lesson.update({
-    where: { id: input.lessonId },
+  const latest = versions[0];
+  const version = await db.lessonVersion.create({
+    data: {
+      lessonId,
+      versionNumber: latest.versionNumber + 1,
+      title: latest.title,
+      content: latest.content,
+      competencies: { connect: latest.competencies.map((c) => ({ id: c.id })) },
+    },
+  });
+
+  await recordAuditEvent({
+    actorId,
+    action: "VERSION_CREATED",
+    entityType: "LessonVersion",
+    entityId: version.id,
+    metadata: { lessonId, versionNumber: version.versionNumber },
+  });
+
+  return version;
+}
+
+/**
+ * Milestone 14: edits a LessonVersion's content while it is still
+ * Draft — the Faculty "Edit lesson" capability, now scoped to a
+ * specific version rather than the Lesson row itself. Mirrors the
+ * Grade lifecycle's "DRAFT-only editable" rule
+ * (src/services/gradebook/gradebook.ts's enterGrade): once Submitted
+ * for Review, a version must be Returned before it can be edited
+ * again — and once Published, per this milestone's core principle, it
+ * is never editable again by any path, full stop. No separate audit
+ * event is emitted for the edit itself — only the lifecycle
+ * transitions in content-workflow.ts are audited.
+ */
+export async function updateLessonVersionDraft(input: {
+  versionId: string;
+  title: string;
+  content: string;
+  competencyIds: string[];
+}) {
+  const version = await db.lessonVersion.findUnique({ where: { id: input.versionId } });
+  if (!version) throw new Error("Lesson version not found.");
+  if (version.status !== "DRAFT") {
+    throw new Error(
+      "Only a Draft version can be edited. Submitted, Approved, and Published versions are read-only.",
+    );
+  }
+
+  return db.lessonVersion.update({
+    where: { id: input.versionId },
     data: {
       title: input.title,
       content: input.content,
       competencies: { set: input.competencyIds.map((id) => ({ id })) },
     },
+  });
+}
+
+/** The Lesson row itself (identity + ordering + the publishedVersionId pointer) — no content, since Milestone 14 moved all content onto LessonVersion. */
+export async function getLessonById(lessonId: string) {
+  return db.lesson.findUnique({ where: { id: lessonId } });
+}
+
+/**
+ * The Lesson's currently Published version, or null if none has been
+ * published yet — the fail-closed resolution point for Student
+ * delivery. Every Student-facing read of a specific Lesson's content
+ * goes through this function (never a raw `db.lessonVersion.findUnique`
+ * by a client-supplied version id), so a Draft/Submitted/Approved-but-
+ * unpublished newer version stays completely unreachable no matter
+ * what a Student requests.
+ */
+export async function getPublishedLessonVersion(lessonId: string) {
+  const lesson = await db.lesson.findUnique({
+    where: { id: lessonId },
+    select: { publishedVersionId: true },
+  });
+  if (!lesson?.publishedVersionId) return null;
+  return db.lessonVersion.findUnique({
+    where: { id: lesson.publishedVersionId },
+    include: { competencies: true },
+  });
+}
+
+/** The most recently created LessonVersion for a Lesson — during an edit cycle this is unambiguously "the version currently being authored or reviewed," since createNewLessonVersion refuses to start a second one while one is already in flight. */
+export async function getLatestLessonVersion(lessonId: string) {
+  return db.lessonVersion.findFirst({
+    where: { lessonId },
+    orderBy: { versionNumber: "desc" },
+    include: { competencies: true },
+  });
+}
+
+/** Every version of a Lesson, newest first — the Faculty "View version status" / version history capability. */
+export async function listLessonVersions(lessonId: string) {
+  return db.lessonVersion.findMany({
+    where: { lessonId },
+    orderBy: { versionNumber: "desc" },
   });
 }
 
@@ -219,12 +336,26 @@ export async function getProgramById(programId: string) {
     include: {
       school: true,
       cohorts: true,
-      courses: { include: { lessons: true, assessments: true, courseOfferings: true } },
+      courses: {
+        include: {
+          lessons: { include: { versions: { orderBy: { versionNumber: "desc" }, take: 1 } } },
+          assessments: { include: { versions: { orderBy: { versionNumber: "desc" }, take: 1 } } },
+          courseOfferings: true,
+        },
+      },
     },
   });
 }
 
-/** Every Program with its full structure nested — used by the Administrator's Institution Structure screen. */
+/**
+ * Every Program with its full structure nested — used by the
+ * Administrator's Institution Structure screen. Each Lesson/Assessment
+ * includes only its single latest Version (`versions[0]` after this
+ * ordering) — enough to show a current title in this overview list
+ * without pulling full version history here; the Faculty/Program
+ * Director/Administrator screens that need full history use
+ * src/services/academic/content-workflow.ts's dedicated functions.
+ */
 export async function listProgramsWithDetail() {
   return db.program.findMany({
     include: {
@@ -232,8 +363,13 @@ export async function listProgramsWithDetail() {
       cohorts: true,
       courses: {
         include: {
-          lessons: { orderBy: { order: "asc" } },
-          assessments: true,
+          lessons: {
+            orderBy: { order: "asc" },
+            include: { versions: { orderBy: { versionNumber: "desc" }, take: 1 } },
+          },
+          assessments: {
+            include: { versions: { orderBy: { versionNumber: "desc" }, take: 1 } },
+          },
           courseOfferings: { include: { cohort: true } },
         },
       },
@@ -258,24 +394,40 @@ export async function listCourseOfferingsForProgram(programId: string) {
   });
 }
 
+/**
+ * Course/Program metadata for a Course Offering, used by Faculty/
+ * Program Director/Administrator screens (course title, program name,
+ * term). Deliberately does NOT nest Lesson/Assessment detail — that
+ * now means Version detail, and callers that need it (the Curriculum
+ * list, authoring screens) go through
+ * src/services/academic/content-workflow.ts's listContentForCourse
+ * instead, which is version-aware; keeping this function to course-
+ * level metadata only avoids two places needing to agree on how to
+ * shape versioned content.
+ */
 export async function getCourseOfferingById(courseOfferingId: string) {
   return db.courseOffering.findUnique({
     where: { id: courseOfferingId },
     include: {
-      course: { include: { lessons: { orderBy: { order: "asc" } }, assessments: true, program: true } },
+      course: { include: { program: true } },
       cohort: true,
     },
   });
 }
 
 /**
- * Milestone 13: the Student-facing equivalent of getCourseOfferingById,
- * filtered to Published content only — per
- * docs/milestones/milestone-12-curriculum-delivery-vertical-slice/02-content-lifecycle-workflow.md,
- * a Student never sees Draft/Submitted/Approved-but-unpublished
- * content, even in a list. getCourseOfferingById itself is unchanged
- * and continues to serve Faculty/Program Director/Administrator, who
- * need to see every status for authoring and review.
+ * Milestone 13/14: the Student-facing equivalent of
+ * getCourseOfferingById. Filtered to Lessons/Assessments that have a
+ * `publishedVersionId` set — per
+ * docs/milestones/milestone-12-curriculum-delivery-vertical-slice/02-content-lifecycle-workflow.md
+ * and this milestone's fail-closed requirement, a Student never sees
+ * Draft/Submitted/Approved-but-unpublished content, even in a list,
+ * and never sees a version other than the one the `publishedVersionId`
+ * pointer names — a newer Draft/Submitted/Approved version of already-
+ * Published content stays completely invisible here. Each entry
+ * includes its `publishedVersion` so callers render the *version's*
+ * title, not a title field on Lesson/Assessment itself (there isn't
+ * one anymore).
  */
 export async function getCourseOfferingForStudent(courseOfferingId: string) {
   return db.courseOffering.findUnique({
@@ -283,8 +435,15 @@ export async function getCourseOfferingForStudent(courseOfferingId: string) {
     include: {
       course: {
         include: {
-          lessons: { where: { status: "PUBLISHED" }, orderBy: { order: "asc" } },
-          assessments: { where: { status: "PUBLISHED" } },
+          lessons: {
+            where: { publishedVersionId: { not: null } },
+            orderBy: { order: "asc" },
+            include: { publishedVersion: true },
+          },
+          assessments: {
+            where: { publishedVersionId: { not: null } },
+            include: { publishedVersion: true },
+          },
           program: true,
         },
       },

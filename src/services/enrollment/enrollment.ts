@@ -92,21 +92,32 @@ export async function markLessonComplete(
   input: { studentId: string; lessonId: string },
 ) {
   // Fail-closed, per this milestone's Product Requirements Document
-  // (S-1): a Student can only ever complete a Published Lesson, checked
-  // here at the service layer (the last line of defense) as well as by
-  // the page/action layer that reaches it.
+  // (S-1) and Milestone 14's identical requirement: a Student can only
+  // ever complete the Lesson's *currently published* version —
+  // resolved here, server-side, from `publishedVersionId`, never
+  // accepted as a client-supplied version id. This is the last line of
+  // defense, in addition to the page/action layer that reaches it.
   const lesson = await db.lesson.findUnique({
     where: { id: input.lessonId },
-    select: { status: true },
+    select: { publishedVersionId: true },
   });
-  if (!lesson || lesson.status !== "PUBLISHED") {
+  if (!lesson || !lesson.publishedVersionId) {
     throw new Error("This Lesson is not available.");
   }
+  const lessonVersionId = lesson.publishedVersionId;
 
+  // Keyed on [studentId, lessonVersionId]: completing the same
+  // published version twice is idempotent (Milestone 10's original
+  // behavior, preserved exactly), while completing a Lesson after a
+  // newer version has published records a distinct completion against
+  // that new version, leaving the Student's completion of the prior
+  // version (and its timestamp) completely untouched — the same
+  // "new activity uses the new version; historical activity stays put"
+  // mechanism as submitAssessment in src/services/assessments/assessments.ts.
   const completion = await db.lessonCompletion.upsert({
-    where: { studentId_lessonId: { studentId: input.studentId, lessonId: input.lessonId } },
+    where: { studentId_lessonVersionId: { studentId: input.studentId, lessonVersionId } },
     update: {},
-    create: { studentId: input.studentId, lessonId: input.lessonId },
+    create: { studentId: input.studentId, lessonVersionId },
   });
 
   await recordAuditEvent({
@@ -114,14 +125,56 @@ export async function markLessonComplete(
     action: "LESSON_COMPLETED",
     entityType: "Lesson",
     entityId: input.lessonId,
+    metadata: { lessonVersionId },
   });
 
   return completion;
 }
 
-export async function getLessonCompletionsForStudent(studentId: string, courseId: string) {
+/** A Student's completion of a Lesson's *currently published* version — what the live Course/Lesson page shows. Does not surface a completion of a since-superseded version; see getCompletionHistoryForStudent for that. */
+export async function getCompletionForStudent(lessonId: string, studentId: string) {
+  const lesson = await db.lesson.findUnique({
+    where: { id: lessonId },
+    select: { publishedVersionId: true },
+  });
+  if (!lesson?.publishedVersionId) return null;
+
+  return db.lessonCompletion.findUnique({
+    where: {
+      studentId_lessonVersionId: { studentId, lessonVersionId: lesson.publishedVersionId },
+    },
+  });
+}
+
+/** Every completion a Student has ever recorded for any version of a Lesson, newest first — the historical record Milestone 14's core principle exists to preserve. */
+export async function getCompletionHistoryForStudent(lessonId: string, studentId: string) {
   return db.lessonCompletion.findMany({
-    where: { studentId, lesson: { courseId } },
+    where: { studentId, lessonVersion: { lessonId } },
+    include: { lessonVersion: true },
+    orderBy: { completedAt: "desc" },
+  });
+}
+
+/**
+ * Every completion a Student holds toward Lessons in a Course, scoped
+ * to each Lesson's *current* published version only — "N of M lessons
+ * complete" on the Student Dashboard reflects the live requirement,
+ * not a stale one. A completion of a since-superseded version does not
+ * count here (it remains fully queryable via
+ * getCompletionHistoryForStudent, it simply isn't "current" anymore).
+ */
+export async function getLessonCompletionsForStudent(studentId: string, courseId: string) {
+  const lessons = await db.lesson.findMany({
+    where: { courseId, publishedVersionId: { not: null } },
+    select: { publishedVersionId: true },
+  });
+  const publishedVersionIds = lessons
+    .map((l) => l.publishedVersionId)
+    .filter((id): id is string => id !== null);
+  if (publishedVersionIds.length === 0) return [];
+
+  return db.lessonCompletion.findMany({
+    where: { studentId, lessonVersionId: { in: publishedVersionIds } },
   });
 }
 

@@ -48,6 +48,7 @@ Minara-Master-Plan):
 | 11 | [Curriculum Management & Content Engine](./milestones/milestone-11-curriculum-management-content-engine/README.md) | Draft |
 | 12 | [Curriculum Delivery Vertical Slice — Planning](./milestones/milestone-12-curriculum-delivery-vertical-slice/README.md) | Draft |
 | 13 | Curriculum Delivery Vertical Slice — Implementation — *implementation milestone, no documentation directory; see [repository root README](../README.md) and [Milestone 12's plan](./milestones/milestone-12-curriculum-delivery-vertical-slice/README.md)* | Implemented |
+| 14 | Content Versioning Vertical Slice — Implementation — *implementation milestone, no documentation directory; see [repository root README](../README.md)* | Implemented |
 
 Milestones 1–9 and the ADR foundation are documentation-only. Milestone 10
 is this repository's first implementation milestone — a working, tested
@@ -61,8 +62,12 @@ it plans a single, narrow, end-to-end slice through Milestone 11's design
 — proving the architecture against Milestone 10's implemented foundation
 before any broader engine build begins. Milestone 13 implements that
 plan (again application code, no `docs/milestones/` directory of its
-own). Implementation against the remainder of Milestone 11's full engine
-begins only after it, too, is reviewed and approved.
+own). Milestone 14 is a further narrow implementation slice on top of
+Milestone 13 — immutable content versioning for Lessons and Assessments,
+per ADR-011's incremental strategy — again application code with no
+`docs/milestones/` directory of its own. Implementation against the
+remainder of Milestone 11's full engine begins only after it, too, is
+reviewed and approved.
 
 ## Architecture Decision Records
 

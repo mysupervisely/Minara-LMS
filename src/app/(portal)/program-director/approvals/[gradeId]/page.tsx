@@ -18,7 +18,7 @@ export default async function ApprovalDetailPage({
   const grade = await getGradeForApproval(gradeId);
   if (!grade) notFound();
 
-  const programId = grade.submission.assessment.course.programId;
+  const programId = grade.submission.assessmentVersion.assessment.course.programId;
   const isAdministrator = user.roleAssignments.some((ra) => ra.role === "ADMINISTRATOR");
   if (!isAdministrator && !hasRoleForProgram(user, "PROGRAM_DIRECTOR", programId)) {
     notFound();
@@ -32,10 +32,14 @@ export default async function ApprovalDetailPage({
       <p className="muted">
         <Link href="/program-director">&larr; Approvals</Link>
       </p>
-      <h1>{grade.submission.assessment.title}</h1>
+      <h1>
+        {grade.submission.assessmentVersion.title}{" "}
+        <span className="muted">v{grade.submission.assessmentVersion.versionNumber}</span>
+      </h1>
       <p className="muted">
-        {grade.submission.student.name} &middot; {grade.submission.assessment.course.title} &middot;{" "}
-        {grade.submission.assessment.course.program.name}
+        {grade.submission.student.name} &middot;{" "}
+        {grade.submission.assessmentVersion.assessment.course.title} &middot;{" "}
+        {grade.submission.assessmentVersion.assessment.course.program.name}
       </p>
 
       <div className="card">
@@ -47,7 +51,7 @@ export default async function ApprovalDetailPage({
         <h2>Grade</h2>
         <p>
           <strong>
-            {grade.score} / {grade.submission.assessment.maxScore}
+            {grade.score} / {grade.submission.assessmentVersion.maxScore}
           </strong>
         </p>
         {grade.feedback ? <p>{grade.feedback}</p> : null}

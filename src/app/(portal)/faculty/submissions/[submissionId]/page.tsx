@@ -20,7 +20,7 @@ export default async function FacultySubmissionPage({
   const submission = await getSubmissionById(submissionId);
   if (!submission) notFound();
 
-  const allowed = await facultyCanAccessCourse(user.id, submission.assessment.course.id);
+  const allowed = await facultyCanAccessCourse(user.id, submission.assessmentVersion.assessment.course.id);
   if (!allowed) notFound();
 
   const boundEnterGrade = enterGradeAction.bind(null, submissionId);
@@ -33,9 +33,10 @@ export default async function FacultySubmissionPage({
       <p className="muted">
         <Link href="/faculty">&larr; My Sections</Link>
       </p>
-      <h1>{submission.assessment.title}</h1>
+      <h1>{submission.assessmentVersion.title}</h1>
       <p className="muted">
-        {submission.student.name} &middot; submitted {submission.submittedAt.toLocaleString()}
+        Version {submission.assessmentVersion.versionNumber} &middot; {submission.student.name}{" "}
+        &middot; submitted {submission.submittedAt.toLocaleString()}
       </p>
 
       <div className="card">
@@ -52,7 +53,7 @@ export default async function FacultySubmissionPage({
       ) : (
         <GradeForm
           action={boundEnterGrade}
-          maxScore={submission.assessment.maxScore}
+          maxScore={submission.assessmentVersion.maxScore}
           defaultScore={submission.grade?.score}
           defaultFeedback={submission.grade?.feedback}
         />

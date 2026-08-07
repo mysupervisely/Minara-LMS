@@ -25,8 +25,13 @@ export default async function StudentCoursePage({
   const offering = await getCourseOfferingForStudent(courseOfferingId);
   if (!offering) notFound();
 
+  // getLessonCompletionsForStudent already scopes to each Lesson's
+  // *current* published version (see that function's comment) — a
+  // completion's lessonVersionId here always equals the corresponding
+  // Lesson's publishedVersionId, so comparing against that pointer is
+  // exactly "has the Student completed the Lesson as it stands today."
   const completions = await getLessonCompletionsForStudent(user.id, offering.course.id);
-  const completedLessonIds = new Set(completions.map((c) => c.lessonId));
+  const completedVersionIds = new Set(completions.map((c) => c.lessonVersionId));
 
   const submissions = await Promise.all(
     offering.course.assessments.map((assessment) =>
@@ -54,9 +59,9 @@ export default async function StudentCoursePage({
             {offering.course.lessons.map((lesson) => (
               <li key={lesson.id}>
                 <Link href={`/student/courses/${courseOfferingId}/lessons/${lesson.id}`}>
-                  {lesson.title}
+                  {lesson.publishedVersion?.title}
                 </Link>{" "}
-                {completedLessonIds.has(lesson.id) ? (
+                {completedVersionIds.has(lesson.publishedVersionId ?? "") ? (
                   <span className="badge badge--approved">Complete</span>
                 ) : (
                   <span className="badge badge--draft">Not Started</span>
@@ -80,11 +85,11 @@ export default async function StudentCoursePage({
                   <Link
                     href={`/student/courses/${courseOfferingId}/assessments/${assessment.id}`}
                   >
-                    {assessment.title}
+                    {assessment.publishedVersion?.title}
                   </Link>{" "}
                   {submission?.grade?.status === "APPROVED" ? (
                     <span className="badge badge--approved">
-                      Grade: {submission.grade.score}/{assessment.maxScore}
+                      Grade: {submission.grade.score}/{assessment.publishedVersion?.maxScore}
                     </span>
                   ) : submission ? (
                     <span className="badge badge--submitted">Submitted</span>

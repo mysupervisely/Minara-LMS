@@ -47,7 +47,7 @@ describe("Competency tracking", () => {
     const progress = await getCompetencyProgressForStudent(scenario.student.id);
     const entry = progress.find((c) => c.id === scenario.competency.id);
     expect(entry).toBeDefined();
-    expect(entry?.lessonTitles).toContain(scenario.lesson.title);
+    expect(entry?.lessonTitles).toContain(scenario.lessonVersion.title);
   });
 
   it("shows no Competency progress for a Student with no Approved Grades", async () => {

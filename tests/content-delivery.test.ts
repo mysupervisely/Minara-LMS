@@ -1,23 +1,26 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { resetDatabase } from "./helpers/reset-db";
 import { buildFullScenario } from "./helpers/fixtures";
-import { createLesson, getCourseOfferingForStudent, getCourseOfferingById } from "@/services/academic/institution";
+import { createLesson, getCourseOfferingForStudent } from "@/services/academic/institution";
+import { listContentForCourse } from "@/services/academic/content-workflow";
 import { createAssessment } from "@/services/assessments/assessments";
 import { markLessonComplete } from "@/services/enrollment/enrollment";
 import { submitAssessment } from "@/services/assessments/assessments";
 
 /**
  * Content delivery test — Milestone 13's Implementation Plan Phase 3
- * ("Student Delivery"): Published content, and only Published content,
- * reaches enrolled Students; a direct request against non-Published
- * content is denied at the service layer (fail-closed), per
+ * ("Student Delivery"), extended by Milestone 14: only a Lesson's/
+ * Assessment's *currently published version* reaches enrolled
+ * Students; a direct request against non-Published content — or a
+ * Draft/Submitted/Approved newer version of already-Published content
+ * — is denied at the service layer (fail-closed), per
  * docs/milestones/milestone-12-curriculum-delivery-vertical-slice/01-product-requirements-document.md
- * (S-1).
+ * (S-1) and this milestone's identical requirement.
  */
 describe("Content delivery", () => {
   beforeEach(resetDatabase);
 
-  it("only lists Published Lessons/Assessments on the Student-facing Course Offering read", async () => {
+  it("only lists Published Lessons/Assessments (their published version) on the Student-facing Course Offering read", async () => {
     const scenario = await buildFullScenario();
     // A Draft Lesson, never submitted/approved/published.
     await createLesson(
@@ -26,28 +29,29 @@ describe("Content delivery", () => {
     );
 
     const studentView = await getCourseOfferingForStudent(scenario.courseOffering.id);
-    const titles = studentView?.course.lessons.map((l) => l.title) ?? [];
-    expect(titles).toContain(scenario.lesson.title); // published by the fixture
+    const titles = studentView?.course.lessons.map((l) => l.publishedVersion?.title) ?? [];
+    expect(titles).toContain(scenario.lessonVersion.title); // published by the fixture
     expect(titles).not.toContain("Still Drafting");
 
-    // The Faculty-facing read is unfiltered — it must still see the Draft.
-    const facultyView = await getCourseOfferingById(scenario.courseOffering.id);
-    const facultyTitles = facultyView?.course.lessons.map((l) => l.title) ?? [];
+    // The Faculty-facing read (listContentForCourse) is unfiltered — it
+    // must still see the Draft Lesson's latest version.
+    const facultyView = await listContentForCourse(scenario.course.id);
+    const facultyTitles = facultyView.lessons.map((l) => l.versions[0]?.title);
     expect(facultyTitles).toContain("Still Drafting");
   });
 
-  it("lets a Student complete a Published Lesson exactly as in Milestone 10", async () => {
+  it("lets a Student complete a Published Lesson exactly as in Milestone 10, recorded against the published version", async () => {
     const scenario = await buildFullScenario();
     const completion = await markLessonComplete({
       studentId: scenario.student.id,
       lessonId: scenario.lesson.id,
     });
-    expect(completion.lessonId).toBe(scenario.lesson.id);
+    expect(completion.lessonVersionId).toBe(scenario.lessonVersion.id);
   });
 
   it("denies completing a Lesson that is not Published, even with a direct id (fail-closed)", async () => {
     const scenario = await buildFullScenario();
-    const draftLesson = await createLesson(
+    const { lesson: draftLesson } = await createLesson(
       { courseId: scenario.course.id, title: "Not Yet", content: "Draft." },
       scenario.faculty.id,
     );
@@ -66,11 +70,12 @@ describe("Content delivery", () => {
       content: "My response.",
     });
     expect(submission.content).toBe("My response.");
+    expect(submission.assessmentVersionId).toBe(scenario.assessmentVersion.id);
   });
 
   it("denies submitting an Assessment that is not Published, even with a direct id (fail-closed)", async () => {
     const scenario = await buildFullScenario();
-    const draftAssessment = await createAssessment(
+    const { assessment: draftAssessment } = await createAssessment(
       { courseId: scenario.course.id, title: "Not Yet", instructions: "Draft." },
       scenario.faculty.id,
     );

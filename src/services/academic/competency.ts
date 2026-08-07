@@ -59,18 +59,29 @@ export async function getCompetencyProgressForStudent(
 ): Promise<CompetencyProgressView[]> {
   const approvedGrades = await db.grade.findMany({
     where: { status: "APPROVED", submission: { studentId } },
-    select: { submission: { select: { assessment: { select: { courseId: true } } } } },
+    select: {
+      submission: { select: { assessmentVersion: { select: { assessment: { select: { courseId: true } } } } } },
+    },
   });
 
   const courseIds = Array.from(
-    new Set(approvedGrades.map((g) => g.submission.assessment.courseId)),
+    new Set(approvedGrades.map((g) => g.submission.assessmentVersion.assessment.courseId)),
   );
   if (courseIds.length === 0) return [];
 
+  // Milestone 14: Competency now links to LessonVersion, not Lesson
+  // directly (a Lesson's Competency tags live on whichever version
+  // carries them). This still deliberately reads as course-level, not
+  // version-level, granularity — the same simplification the Domain
+  // Impact Review named for Milestone 13, now expressed through one
+  // more hop (lessonVersions.lesson.courseId).
   const competencies = await db.competency.findMany({
-    where: { lessons: { some: { courseId: { in: courseIds } } } },
+    where: { lessonVersions: { some: { lesson: { courseId: { in: courseIds } } } } },
     include: {
-      lessons: { where: { courseId: { in: courseIds } }, select: { title: true } },
+      lessonVersions: {
+        where: { lesson: { courseId: { in: courseIds } } },
+        select: { title: true },
+      },
     },
     orderBy: { createdAt: "asc" },
   });
@@ -79,6 +90,6 @@ export async function getCompetencyProgressForStudent(
     id: c.id,
     name: c.name,
     programId: c.programId,
-    lessonTitles: c.lessons.map((l) => l.title),
+    lessonTitles: c.lessonVersions.map((v) => v.title),
   }));
 }

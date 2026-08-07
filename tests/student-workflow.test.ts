@@ -31,7 +31,7 @@ describe("Student workflow", () => {
 
     completions = await getLessonCompletionsForStudent(scenario.student.id, scenario.course.id);
     expect(completions).toHaveLength(1);
-    expect(completions[0].lessonId).toBe(scenario.lesson.id);
+    expect(completions[0].lessonVersionId).toBe(scenario.lessonVersion.id);
 
     const submission = await submitAssessment({
       assessmentId: scenario.assessment.id,

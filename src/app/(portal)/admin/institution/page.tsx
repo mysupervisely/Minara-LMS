@@ -281,7 +281,12 @@ export default async function AdminInstitutionPage() {
               <h3>{c.title}</h3>
               <ul>
                 {c.lessons.map((l) => (
-                  <li key={l.id}>{l.title}</li>
+                  <li key={l.id}>
+                    {l.versions[0]?.title ?? "(untitled)"}{" "}
+                    <span className="muted">
+                      v{l.versions[0]?.versionNumber} — {l.versions[0]?.status}
+                    </span>
+                  </li>
                 ))}
               </ul>
             </div>
@@ -323,7 +328,11 @@ export default async function AdminInstitutionPage() {
               <ul>
                 {c.assessments.map((a) => (
                   <li key={a.id}>
-                    {a.title} <span className="muted">(/{a.maxScore})</span>
+                    {a.versions[0]?.title ?? "(untitled)"}{" "}
+                    <span className="muted">
+                      (/{a.versions[0]?.maxScore}) v{a.versions[0]?.versionNumber} —{" "}
+                      {a.versions[0]?.status}
+                    </span>
                   </li>
                 ))}
               </ul>

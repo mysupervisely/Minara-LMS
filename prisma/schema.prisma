@@ -1,12 +1,19 @@
-// Minara-LMS — Prisma schema for the Milestone 10 vertical slice.
+// Minara-LMS — Prisma schema for the Milestone 10 vertical slice, extended
+// by Milestone 13 (content approval/publishing lifecycle + a minimal
+// Competency) and Milestone 14 (immutable Lesson/Assessment versioning).
 //
 // This schema implements a deliberately narrow subset of the domain model
 // documented in docs/milestones/milestone-5-domain-model-data-architecture/,
 // scoped to what the vertical slice in
 // docs/milestones/milestone-9-engineering-foundation-development-setup/10-first-implementation-roadmap.md
-// and ADR-011 require. It is NOT full curriculum management (per Milestone
-// 10, Phase 5 instructions) — there is no Module layer between Course and
-// Lesson, no Question Bank, and no Competency/Learning Outcome modeling yet.
+// and ADR-011 require, applied twice more (Milestones 13 and 14) per that
+// same ADR's discipline of proving one narrow slice at a time rather than
+// building the full docs/milestones/milestone-11-curriculum-management-content-engine/
+// engine at once. It is still NOT full curriculum management — there is no
+// Module layer between Course and Lesson, no Question Bank, no Program/
+// Course-level versioning (only Lesson/Assessment), and no full
+// Competency/Learning Outcome hierarchy (only a minimal, Program-scoped
+// Competency, per Milestone 13's Domain Impact Review).
 //
 // Database engine: SQLite for local development and this vertical slice's
 // demonstrability, per the "database/domain decisions made" note in the
@@ -175,12 +182,17 @@ model Competency {
   name      String
   createdAt DateTime @default(now())
 
-  // A Lesson links to one or more Competencies directly (Milestone 11's
-  // Lesson → Course Outcome link, simplified to one join instead of
-  // two). Assessment has no direct Competency link — its contribution
-  // to Competency Progress is derived via the Lessons of the Course it
-  // belongs to; see src/services/academic/competency.ts.
-  lessons Lesson[]
+  // A Lesson Version links to one or more Competencies directly
+  // (Milestone 11's Lesson → Course Outcome link, simplified to one
+  // join instead of two). Assessment has no direct Competency link —
+  // its contribution to Competency Progress is derived via the Lesson
+  // Versions of the Course it belongs to; see
+  // src/services/academic/competency.ts. Prior to Milestone 14 this
+  // related directly to Lesson; every Competency tag now lives on the
+  // specific LessonVersion it was chosen for (an edit that changes a
+  // Lesson's Competency tags is exactly the kind of change that should
+  // produce a new Version, not mutate history).
+  lessonVersions LessonVersion[]
 
   @@map("competencies")
 }
@@ -242,50 +254,106 @@ model CourseOffering {
   @@map("course_offerings")
 }
 
-// status: Milestone 13's content lifecycle — DRAFT → SUBMITTED →
-// APPROVED → PUBLISHED, per
-// docs/milestones/milestone-12-curriculum-delivery-vertical-slice/02-content-lifecycle-workflow.md.
-// A deliberate narrowing of Milestone 11's six-state Publishing
-// Workflow (no separate Faculty-Review/Committee-Review split, no
-// Archive) — see that document for the full rationale. Every
-// Student-facing read path filters to status == PUBLISHED; Faculty/
-// Program Director/Administrator see every status. returnReason holds
-// the Program Director's required explanation when content is
-// returned to Draft — stored on the row itself (not only in the Audit
-// Log) because the Audit Log is Administrator-only visibility
-// (ADR-005), and Faculty need to see why their own content was
-// returned.
+// Milestone 14 (Content Versioning Vertical Slice): Lesson is the
+// stable, immutable-in-shape *identity* a Student enrolls into and a
+// Course Offering delivers — the actual deliverable content lives
+// entirely on LessonVersion below, per
+// docs/milestones/milestone-11-curriculum-management-content-engine/04-versioning-strategy.md's
+// entity/version split, which Milestone 12/13's Domain Impact Review
+// explicitly deferred as this milestone's next step. As of Migration B
+// (prisma/migrations/), Lesson no longer carries title/content/status/
+// returnReason/Competency tags at all — a Lesson with zero content of
+// its own, only an identity and a pointer, is the whole point: it is
+// what makes "create a new Version without touching the old one"
+// possible in the first place.
+//
+// `publishedVersionId` is the single pointer this entire slice exists
+// to prove out: the one LessonVersion, among possibly several
+// Approved-but-superseded ones, that is actually delivered to
+// Students. It is set exactly once per publish action (never
+// retroactively changed) — see src/services/academic/content-workflow.ts.
+// A null value means this Lesson has never had a version published
+// yet (still authoring its first version).
 model Lesson {
-  id           String   @id @default(cuid())
-  courseId     String
-  course       Course   @relation(fields: [courseId], references: [id])
-  title        String
-  content      String
-  order        Int      @default(0)
-  status       String   @default("DRAFT")
-  returnReason String?
-  createdAt    DateTime @default(now())
+  id        String   @id @default(cuid())
+  courseId  String
+  course    Course   @relation(fields: [courseId], references: [id])
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
 
-  completions  LessonCompletion[]
-  competencies Competency[]
+  versions           LessonVersion[] @relation("LessonVersions")
+  publishedVersionId String?
+  publishedVersion   LessonVersion?  @relation("LessonPublishedVersion", fields: [publishedVersionId], references: [id])
 
   @@map("lessons")
 }
 
-model Assessment {
-  id           String   @id @default(cuid())
-  courseId     String
-  course       Course   @relation(fields: [courseId], references: [id])
-  title        String
-  instructions String
-  maxScore     Int      @default(100)
-  status       String   @default("DRAFT")
-  returnReason String?
-  createdAt    DateTime @default(now())
+// The immutable, versioned content of a Lesson at a point in time.
+// Once a version's status reaches PUBLISHED, no function in this
+// codebase ever writes to that row again — see
+// docs/milestones/milestone-11-curriculum-management-content-engine/04-versioning-strategy.md#the-core-rule
+// and src/services/academic/content-workflow.ts's guard clauses.
+// Multiple versions of the same Lesson can carry status PUBLISHED
+// simultaneously (each was legitimately published once); which one is
+// *live* is decided solely by Lesson.publishedVersionId, never by
+// scanning for status — a deliberate design choice documented in this
+// milestone's report so a superseded version's row is never touched
+// again for any reason, including "marking it superseded."
+model LessonVersion {
+  id            String    @id @default(cuid())
+  lessonId      String
+  lesson        Lesson    @relation("LessonVersions", fields: [lessonId], references: [id])
+  versionNumber Int
+  title         String
+  content       String
+  status        String    @default("DRAFT")
+  returnReason  String?
+  createdAt     DateTime  @default(now())
+  publishedAt   DateTime?
 
-  submissions Submission[]
+  competencies       Competency[]
+  completions        LessonCompletion[]
+  publishedForLesson Lesson[]           @relation("LessonPublishedVersion")
+
+  @@unique([lessonId, versionNumber])
+  @@map("lesson_versions")
+}
+
+// See the Lesson/LessonVersion comments above — Assessment follows the
+// identical entity/version split, for the identical reason. Submission
+// belongs to a specific AssessmentVersion (below), never to Assessment
+// directly, so Assessment itself needs no `submissions` relation.
+model Assessment {
+  id        String   @id @default(cuid())
+  courseId  String
+  course    Course   @relation(fields: [courseId], references: [id])
+  createdAt DateTime @default(now())
+
+  versions           AssessmentVersion[] @relation("AssessmentVersions")
+  publishedVersionId String?
+  publishedVersion   AssessmentVersion?  @relation("AssessmentPublishedVersion", fields: [publishedVersionId], references: [id])
 
   @@map("assessments")
+}
+
+model AssessmentVersion {
+  id            String     @id @default(cuid())
+  assessmentId  String
+  assessment    Assessment @relation("AssessmentVersions", fields: [assessmentId], references: [id])
+  versionNumber Int
+  title         String
+  instructions  String
+  maxScore      Int        @default(100)
+  status        String     @default("DRAFT")
+  returnReason  String?
+  createdAt     DateTime   @default(now())
+  publishedAt   DateTime?
+
+  submissions            Submission[]
+  publishedForAssessment Assessment[] @relation("AssessmentPublishedVersion")
+
+  @@unique([assessmentId, versionNumber])
+  @@map("assessment_versions")
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -319,32 +387,50 @@ model Enrollment {
 // The Course Progress concept from the Student Domain Model, narrowed
 // for this slice to per-Lesson completion tracking (no Module-level
 // rollup, consistent with the Course→Lesson simplification above).
+//
+// Milestone 14: a completion is tied to the exact LessonVersion a
+// Student consumed — "historical student activity remains associated
+// with the version they actually used" is this field, full stop. A
+// Student's completion of Version 1 is never reinterpreted against
+// Version 2's content once Version 2 publishes; see
+// src/services/enrollment/enrollment.ts's markLessonComplete. There is
+// deliberately no direct `lessonId` here — the parent Lesson is always
+// reached via `lessonVersion.lessonId`, so there is exactly one place
+// (the Version) that says which Lesson a completion belongs to, never
+// two fields that could drift apart.
 model LessonCompletion {
-  id          String   @id @default(cuid())
-  studentId   String
-  student     User     @relation(fields: [studentId], references: [id])
-  lessonId    String
-  lesson      Lesson   @relation(fields: [lessonId], references: [id])
-  completedAt DateTime @default(now())
+  id              String        @id @default(cuid())
+  studentId       String
+  student         User          @relation(fields: [studentId], references: [id])
+  lessonVersionId String
+  lessonVersion   LessonVersion @relation(fields: [lessonVersionId], references: [id])
+  completedAt     DateTime      @default(now())
 
-  @@unique([studentId, lessonId])
+  @@unique([studentId, lessonVersionId])
   @@map("lesson_completions")
 }
 
+// Milestone 14: a Submission is tied to the exact AssessmentVersion a
+// Student attempted — same historical-integrity guarantee, and the
+// same single-source-of-truth reasoning, as LessonCompletion above.
+// Grade continues to reference Submission by `submissionId` only,
+// entirely unchanged by this milestone — a Student's Grade is exactly
+// as valid after a newer Assessment Version publishes as it was the
+// moment it was approved.
 model Submission {
-  id           String     @id @default(cuid())
-  assessmentId String
-  assessment   Assessment @relation(fields: [assessmentId], references: [id])
-  studentId    String
-  student      User       @relation(fields: [studentId], references: [id])
-  enrollmentId String
-  enrollment   Enrollment @relation(fields: [enrollmentId], references: [id])
-  content      String
-  submittedAt  DateTime   @default(now())
+  id                  String            @id @default(cuid())
+  assessmentVersionId String
+  assessmentVersion   AssessmentVersion @relation(fields: [assessmentVersionId], references: [id])
+  studentId           String
+  student             User              @relation(fields: [studentId], references: [id])
+  enrollmentId        String
+  enrollment          Enrollment        @relation(fields: [enrollmentId], references: [id])
+  content             String
+  submittedAt         DateTime          @default(now())
 
   grade Grade?
 
-  @@unique([assessmentId, studentId])
+  @@unique([assessmentVersionId, studentId])
   @@map("submissions")
 }
 

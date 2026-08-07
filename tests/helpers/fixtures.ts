@@ -78,7 +78,7 @@ export async function buildAcademicStructure(actorId: string) {
     { programId: program.id, name: "Test Competency" },
     actorId,
   );
-  const lesson = await createLesson(
+  const { lesson, version: lessonVersion } = await createLesson(
     {
       courseId: course.id,
       title: "Lesson One",
@@ -87,28 +87,31 @@ export async function buildAcademicStructure(actorId: string) {
     },
     actorId,
   );
-  const assessment = await createAssessment(
+  const { assessment, version: assessmentVersion } = await createAssessment(
     { courseId: course.id, title: "Assessment One", instructions: "Do the thing.", maxScore: 100 },
     actorId,
   );
 
   // Milestone 13's content lifecycle defaults every Lesson/Assessment
-  // to Draft (see prisma/schema.prisma) — every existing (Milestone
-  // 10) test in this suite presumes content is already deliverable, so
-  // this shared fixture walks both through Draft → Submitted →
-  // Approved → Published here, using the same service functions the
-  // real Faculty/Program Director/Administrator workflow uses (per
-  // this fixture module's own "built through the real service
-  // functions" convention). Tests that specifically exercise the
-  // content lifecycle itself (tests/content-*.test.ts) build their own
+  // Version to Draft (see prisma/schema.prisma) — every existing
+  // (Milestone 10) test in this suite presumes content is already
+  // deliverable, so this shared fixture walks both first Versions
+  // through Draft → Submitted → Approved → Published here (Milestone
+  // 14: publishing a version also sets the parent Lesson/Assessment's
+  // publishedVersionId pointer — see content-workflow.ts's
+  // publishContent), using the same service functions the real
+  // Faculty/Program Director/Administrator workflow uses (per this
+  // fixture module's own "built through the real service functions"
+  // convention). Tests that specifically exercise the content/version
+  // lifecycle itself (tests/content-*.test.ts) build their own
   // Draft-status content directly via createLesson/createAssessment
   // instead of this fixture.
-  await submitContentForReview("LESSON", lesson.id, actorId);
-  await approveContent("LESSON", lesson.id, actorId);
-  await publishContent("LESSON", lesson.id, actorId);
-  await submitContentForReview("ASSESSMENT", assessment.id, actorId);
-  await approveContent("ASSESSMENT", assessment.id, actorId);
-  await publishContent("ASSESSMENT", assessment.id, actorId);
+  await submitContentForReview("LESSON", lessonVersion.id, actorId);
+  await approveContent("LESSON", lessonVersion.id, actorId);
+  await publishContent("LESSON", lessonVersion.id, actorId);
+  await submitContentForReview("ASSESSMENT", assessmentVersion.id, actorId);
+  await approveContent("ASSESSMENT", assessmentVersion.id, actorId);
+  await publishContent("ASSESSMENT", assessmentVersion.id, actorId);
 
   return {
     institution,
@@ -118,7 +121,9 @@ export async function buildAcademicStructure(actorId: string) {
     course,
     courseOffering,
     lesson,
+    lessonVersion,
     assessment,
+    assessmentVersion,
     competency,
   };
 }

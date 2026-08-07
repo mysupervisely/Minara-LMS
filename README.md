@@ -1,6 +1,6 @@
 # Minara-LMS
 
-**Status:** Milestones 10 (Foundation Build) and 13 (Curriculum Delivery Vertical Slice) implemented · Milestone 11 (Curriculum Management & Content Engine) documentation drafted, pending approval
+**Status:** Milestones 10 (Foundation Build), 13 (Curriculum Delivery Vertical Slice), and 14 (Content Versioning Vertical Slice) implemented · Milestone 11 (Curriculum Management & Content Engine) documentation drafted, pending approval
 **Last Updated:** 2026-08-07
 
 ## What This Repository Is
@@ -73,6 +73,27 @@ review, no content versioning, one minimal Competency link, no Question
 Banks) — see
 [docs/milestones/milestone-12-curriculum-delivery-vertical-slice/03-domain-impact-review.md](./docs/milestones/milestone-12-curriculum-delivery-vertical-slice/03-domain-impact-review.md)
 for exactly what was, and deliberately was not, built.
+
+**Milestone 14 — Content Versioning Vertical Slice — implemented.** Per
+[ADR-011](./docs/architecture/adr/ADR-011-vertical-slice-development-strategy.md),
+the next narrow slice on top of Milestone 13: Lessons and Assessments are
+now versioned identities. A Lesson/Assessment is a stable parent record
+with a `publishedVersionId` pointer; each LessonVersion/AssessmentVersion
+carries its own content and its own Draft → Submitted → Approved →
+Published lifecycle through the same content-workflow.ts used since
+Milestone 13 (no second workflow engine). Editing Published content is
+impossible — Faculty instead create a new Version, which starts as a
+Draft invisible to Students and goes through review independently while
+the previously Published Version stays live and immutable. Publishing a
+new Version only repoints `publishedVersionId` for *future* activity;
+existing `LessonCompletion`/`Submission` rows stay foreign-keyed to the
+exact Version a Student actually completed/submitted, so historical
+records remain accurate after newer Versions are published. See
+[docs/milestones/milestone-12-curriculum-delivery-vertical-slice/03-domain-impact-review.md](./docs/milestones/milestone-12-curriculum-delivery-vertical-slice/03-domain-impact-review.md)
+for the boundary Milestone 13 deliberately left open ("no content
+versioning") that this milestone now closes, narrowly, for Lessons and
+Assessments only (Programs/Courses/Modules, Question Banks, and an
+Archive workflow remain out of scope).
 
 ## Documentation
 

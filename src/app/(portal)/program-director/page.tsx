@@ -71,10 +71,13 @@ export default async function ProgramDirectorDashboardPage() {
                   {pending.map((grade) => (
                     <tr key={grade.id}>
                       <td>{grade.submission.student.name}</td>
-                      <td>{grade.submission.assessment.course.title}</td>
-                      <td>{grade.submission.assessment.title}</td>
+                      <td>{grade.submission.assessmentVersion.assessment.course.title}</td>
                       <td>
-                        {grade.score} / {grade.submission.assessment.maxScore}
+                        {grade.submission.assessmentVersion.title}{" "}
+                        <span className="muted">v{grade.submission.assessmentVersion.versionNumber}</span>
+                      </td>
+                      <td>
+                        {grade.score} / {grade.submission.assessmentVersion.maxScore}
                       </td>
                       <td>{grade.enteredBy.name}</td>
                       <td>

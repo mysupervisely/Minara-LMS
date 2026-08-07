@@ -131,16 +131,24 @@ export async function rejectGrade(gradeId: string, approverId: string) {
   return updated;
 }
 
-/** Every SUBMITTED grade for Course Offerings within a Program — the Program Director's approval queue. */
+/**
+ * Every SUBMITTED grade for Course Offerings within a Program — the
+ * Program Director's approval queue. Milestone 14: a Submission
+ * belongs to a specific AssessmentVersion, so course/program scoping
+ * now resolves through `assessmentVersion.assessment.course` — Grade
+ * itself is completely unaffected by versioning (still keyed by
+ * `submissionId` alone), consistent with "do not rewrite historical
+ * grades."
+ */
 export async function listPendingApprovalsForProgram(programId: string) {
   return db.grade.findMany({
     where: {
       status: "SUBMITTED",
-      submission: { assessment: { course: { programId } } },
+      submission: { assessmentVersion: { assessment: { course: { programId } } } },
     },
     include: {
       submission: {
-        include: { student: true, assessment: { include: { course: true } } },
+        include: { student: true, assessmentVersion: { include: { assessment: { include: { course: true } } } } },
       },
       enteredBy: true,
     },
@@ -155,7 +163,9 @@ export async function getGradeForStudent(submissionId: string) {
 export async function listApprovedGradesForStudent(studentId: string) {
   return db.grade.findMany({
     where: { status: "APPROVED", submission: { studentId } },
-    include: { submission: { include: { assessment: { include: { course: true } } } } },
+    include: {
+      submission: { include: { assessmentVersion: { include: { assessment: { include: { course: true } } } } } },
+    },
   });
 }
 
@@ -167,7 +177,7 @@ export async function getGradeForApproval(gradeId: string) {
       submission: {
         include: {
           student: true,
-          assessment: { include: { course: { include: { program: true } } } },
+          assessmentVersion: { include: { assessment: { include: { course: { include: { program: true } } } } } },
         },
       },
       enteredBy: true,

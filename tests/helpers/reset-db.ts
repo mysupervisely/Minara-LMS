@@ -17,8 +17,21 @@ export async function resetDatabase() {
   await db.roleAssignment.deleteMany();
   await db.session.deleteMany();
   await db.courseOffering.deleteMany();
+
+  // Milestone 14: Lesson <-> LessonVersion and Assessment <->
+  // AssessmentVersion are mutually referential
+  // (Lesson.publishedVersionId -> LessonVersion.id,
+  // LessonVersion.lessonId -> Lesson.id, and the same shape for
+  // Assessment/AssessmentVersion) — deleting either side first always
+  // violates the other's foreign key. Null out the publishedVersionId
+  // pointers first to break the cycle, then delete each pair in either
+  // order.
+  await db.lesson.updateMany({ data: { publishedVersionId: null } });
+  await db.assessment.updateMany({ data: { publishedVersionId: null } });
+  await db.assessmentVersion.deleteMany();
   await db.assessment.deleteMany();
-  await db.lesson.deleteMany(); // cascades the implicit _CompetencyToLesson join rows
+  await db.lessonVersion.deleteMany(); // cascades the implicit _CompetencyToLessonVersion join rows
+  await db.lesson.deleteMany();
   await db.competency.deleteMany();
   await db.course.deleteMany();
   await db.cohort.deleteMany();

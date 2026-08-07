@@ -54,17 +54,22 @@ export default async function FacultyCoursePage({
           <p className="muted">No Lessons yet.</p>
         ) : (
           <ul>
-            {lessons.map((lesson) => (
-              <li key={lesson.id}>
-                <Link href={`/faculty/courses/${courseOfferingId}/lessons/${lesson.id}`}>
-                  {lesson.title}
-                </Link>{" "}
-                <span className={`badge badge--${lesson.status.toLowerCase()}`}>{lesson.status}</span>
-                {lesson.competencies.length === 0 ? (
-                  <span className="muted"> &middot; no Competency tagged</span>
-                ) : null}
-              </li>
-            ))}
+            {lessons.map((lesson) => {
+              const latest = lesson.versions[0];
+              if (!latest) return null;
+              return (
+                <li key={lesson.id}>
+                  <Link href={`/faculty/courses/${courseOfferingId}/lessons/${lesson.id}`}>
+                    {latest.title}
+                  </Link>{" "}
+                  <span className="muted">v{latest.versionNumber}</span>{" "}
+                  <span className={`badge badge--${latest.status.toLowerCase()}`}>{latest.status}</span>
+                  {latest.competencies.length === 0 ? (
+                    <span className="muted"> &middot; no Competency tagged</span>
+                  ) : null}
+                </li>
+              );
+            })}
           </ul>
         )}
         <p>
@@ -76,16 +81,21 @@ export default async function FacultyCoursePage({
           <p className="muted">No Assessments yet.</p>
         ) : (
           <ul>
-            {assessments.map((assessment) => (
-              <li key={assessment.id}>
-                <Link href={`/faculty/courses/${courseOfferingId}/assessments/${assessment.id}`}>
-                  {assessment.title}
-                </Link>{" "}
-                <span className={`badge badge--${assessment.status.toLowerCase()}`}>
-                  {assessment.status}
-                </span>
-              </li>
-            ))}
+            {assessments.map((assessment) => {
+              const latest = assessment.versions[0];
+              if (!latest) return null;
+              return (
+                <li key={assessment.id}>
+                  <Link href={`/faculty/courses/${courseOfferingId}/assessments/${assessment.id}`}>
+                    {latest.title}
+                  </Link>{" "}
+                  <span className="muted">v{latest.versionNumber}</span>{" "}
+                  <span className={`badge badge--${latest.status.toLowerCase()}`}>
+                    {latest.status}
+                  </span>
+                </li>
+              );
+            })}
           </ul>
         )}
         <p>
@@ -130,7 +140,10 @@ export default async function FacultyCoursePage({
                 {submissions.map((submission) => (
                   <tr key={submission.id}>
                     <td>{submission.student.name}</td>
-                    <td>{submission.assessment.title}</td>
+                    <td>
+                      {submission.assessmentVersion.title}{" "}
+                      <span className="muted">v{submission.assessmentVersion.versionNumber}</span>
+                    </td>
                     <td>{submission.submittedAt.toLocaleDateString()}</td>
                     <td>
                       {submission.grade ? (

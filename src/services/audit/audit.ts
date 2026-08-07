@@ -45,18 +45,30 @@ export type AuditAction =
   | "GRADE_SUBMITTED_FOR_APPROVAL"
   | "GRADE_APPROVED"
   | "GRADE_REJECTED"
-  // Milestone 13 — Curriculum Delivery Vertical Slice: the content
-  // lifecycle (Draft → Submitted → Approved → Published), per
-  // docs/milestones/milestone-12-curriculum-delivery-vertical-slice/02-content-lifecycle-workflow.md.
-  // "Content created" is already covered by LESSON_CREATED /
-  // ASSESSMENT_CREATED above — these four cover the rest of that
-  // milestone's required audit list ("submitted, approved, published"),
-  // plus the required Return-with-reason step.
-  | "CONTENT_SUBMITTED_FOR_REVIEW"
-  | "CONTENT_RETURNED_TO_DRAFT"
-  | "CONTENT_APPROVED"
-  | "CONTENT_PUBLISHED"
-  | "COMPETENCY_CREATED";
+  | "COMPETENCY_CREATED"
+  // Milestone 14 — Content Versioning Vertical Slice: the version
+  // lifecycle (Draft → Submitted → Approved → Published) at Lesson
+  // Version / Assessment Version granularity, per this milestone's
+  // explicit request for "VERSION_CREATED, VERSION_SUBMITTED,
+  // VERSION_APPROVED, VERSION_RETURNED, VERSION_PUBLISHED." These
+  // supersede Milestone 13's CONTENT_SUBMITTED_FOR_REVIEW /
+  // CONTENT_RETURNED_TO_DRAFT / CONTENT_APPROVED / CONTENT_PUBLISHED,
+  // which were about the Lesson/Assessment row directly — now that
+  // every transition operates on a specific Version instead, these
+  // more precise names replace them going forward. Historical AuditLog
+  // rows already written under the old names remain in the database
+  // and readable exactly as before (this type only governs new
+  // writes; see recordAuditEvent below) — nothing here rewrites
+  // history, consistent with this milestone's own core principle.
+  // VERSION_CREATED fires for every version, including a Lesson's or
+  // Assessment's very first (alongside the existing LESSON_CREATED /
+  // ASSESSMENT_CREATED, which marks the *parent entity's* creation —
+  // two distinct, complementary facts, not a duplicate).
+  | "VERSION_CREATED"
+  | "VERSION_SUBMITTED"
+  | "VERSION_APPROVED"
+  | "VERSION_RETURNED"
+  | "VERSION_PUBLISHED";
 
 export interface RecordAuditEventInput {
   /** The acting User's id, or null for a system-initiated event (e.g. a failed login for an unknown email). */

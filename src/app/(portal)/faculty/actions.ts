@@ -7,12 +7,16 @@ import {
   facultyCanAccessCourse,
   facultyCanAccessCourseOffering,
   createLesson,
-  updateLessonDraft,
+  createNewLessonVersion,
+  updateLessonVersionDraft,
+  getLatestLessonVersion,
 } from "@/services/academic/institution";
 import {
   getSubmissionById,
   createAssessment,
-  updateAssessmentDraft,
+  createNewAssessmentVersion,
+  updateAssessmentVersionDraft,
+  getLatestAssessmentVersion,
 } from "@/services/assessments/assessments";
 import { enterGrade, submitGradeForApproval, GradeStateError } from "@/services/gradebook/gradebook";
 import { submitContentForReview, ContentStateError } from "@/services/academic/content-workflow";
@@ -32,7 +36,10 @@ async function assertFacultyOwnsSubmission(submissionId: string, facultyId: stri
   const submission = await getSubmissionById(submissionId);
   if (!submission) throw new Error("Submission not found.");
 
-  const canAccess = await facultyCanAccessCourse(facultyId, submission.assessment.course.id);
+  const canAccess = await facultyCanAccessCourse(
+    facultyId,
+    submission.assessmentVersion.assessment.course.id,
+  );
   if (!canAccess) throw new Error("You are not assigned to teach this course.");
 
   return submission;
@@ -89,15 +96,25 @@ export async function submitGradeForApprovalAction(
   revalidatePath(`/faculty/submissions/${submissionId}`);
 }
 
-// ── Content authoring — Milestone 13 (Curriculum Delivery Vertical Slice) ──
+// ── Content authoring — Milestone 13/14 (Curriculum Delivery Vertical
+// Slice, Content Versioning Vertical Slice) ─────────────────────────────
 //
 // Faculty capabilities per
-// docs/milestones/milestone-12-curriculum-delivery-vertical-slice/01-product-requirements-document.md:
-// draft a Lesson/Assessment, edit while Draft, submit for review. Every
-// action below is scoped to Course Offerings the Faculty member is
-// assigned to teach — the same `facultyCanAccessCourseOffering` check
-// every other Faculty screen in this codebase uses, per Security
-// Architecture's "no scattered checks" rule.
+// docs/milestones/milestone-12-curriculum-delivery-vertical-slice/01-product-requirements-document.md,
+// now version-aware: draft a Lesson/Assessment (its first Version),
+// create a new Version once the current one is Published, edit while
+// Draft, submit for review. Every action below is scoped to Course
+// Offerings the Faculty member is assigned to teach — the same
+// `facultyCanAccessCourseOffering` check every other Faculty screen in
+// this codebase uses.
+//
+// Every action here is addressed by `lessonId`/`assessmentId` (the
+// stable identity, matching the URL structure), never by a client-
+// supplied version id — the server resolves "the version currently
+// being edited or reviewed" itself via getLatestLessonVersion/
+// getLatestAssessmentVersion, which is unambiguous because
+// createNewLessonVersion/createNewAssessmentVersion refuse to start a
+// second version while one is already in flight.
 
 async function assertFacultyOwnsCourseOffering(courseOfferingId: string, facultyId: string) {
   const allowed = await facultyCanAccessCourseOffering(facultyId, courseOfferingId);
@@ -157,9 +174,12 @@ export async function updateLessonDraftAction(
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
 
+  const latest = await getLatestLessonVersion(lessonId);
+  if (!latest) return { error: "Lesson not found." };
+
   try {
-    await updateLessonDraft({
-      lessonId,
+    await updateLessonVersionDraft({
+      versionId: latest.id,
       title: parsed.data.title,
       content: parsed.data.content,
       competencyIds: parsed.data.competencyIds,
@@ -185,13 +205,35 @@ export async function submitLessonForReviewAction(
   const user = await requireSessionUserWithRole("FACULTY");
   await assertFacultyOwnsCourseOffering(courseOfferingId, user.id);
 
+  const latest = await getLatestLessonVersion(lessonId);
+  if (!latest) throw new Error("Lesson not found.");
+
   try {
-    await submitContentForReview("LESSON", lessonId, user.id);
+    await submitContentForReview("LESSON", latest.id, user.id);
   } catch (error) {
     if (error instanceof ContentStateError) throw new Error(error.message);
     throw error;
   }
 
+  revalidatePath(`/faculty/courses/${courseOfferingId}/lessons/${lessonId}`);
+  revalidatePath(`/faculty/courses/${courseOfferingId}`);
+}
+
+/**
+ * "Faculty creates an edit" → "New Version 2 is created" — this
+ * milestone's Core Workflow, step one. Bound to a plain
+ * `<form action={...}>`; createNewLessonVersion itself refuses to run
+ * if a version is already in flight, surfacing that as a thrown error.
+ */
+export async function createNewLessonVersionAction(
+  lessonId: string,
+  courseOfferingId: string,
+  _formData: FormData,
+): Promise<void> {
+  const user = await requireSessionUserWithRole("FACULTY");
+  await assertFacultyOwnsCourseOffering(courseOfferingId, user.id);
+
+  await createNewLessonVersion(lessonId, user.id);
   revalidatePath(`/faculty/courses/${courseOfferingId}/lessons/${lessonId}`);
   revalidatePath(`/faculty/courses/${courseOfferingId}`);
 }
@@ -244,9 +286,12 @@ export async function updateAssessmentDraftAction(
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
 
+  const latest = await getLatestAssessmentVersion(assessmentId);
+  if (!latest) return { error: "Assessment not found." };
+
   try {
-    await updateAssessmentDraft({
-      assessmentId,
+    await updateAssessmentVersionDraft({
+      versionId: latest.id,
       title: parsed.data.title,
       instructions: parsed.data.instructions,
       maxScore: parsed.data.maxScore ?? 100,
@@ -268,13 +313,30 @@ export async function submitAssessmentForReviewAction(
   const user = await requireSessionUserWithRole("FACULTY");
   await assertFacultyOwnsCourseOffering(courseOfferingId, user.id);
 
+  const latest = await getLatestAssessmentVersion(assessmentId);
+  if (!latest) throw new Error("Assessment not found.");
+
   try {
-    await submitContentForReview("ASSESSMENT", assessmentId, user.id);
+    await submitContentForReview("ASSESSMENT", latest.id, user.id);
   } catch (error) {
     if (error instanceof ContentStateError) throw new Error(error.message);
     throw error;
   }
 
+  revalidatePath(`/faculty/courses/${courseOfferingId}/assessments/${assessmentId}`);
+  revalidatePath(`/faculty/courses/${courseOfferingId}`);
+}
+
+/** The Assessment counterpart to createNewLessonVersionAction above. */
+export async function createNewAssessmentVersionAction(
+  assessmentId: string,
+  courseOfferingId: string,
+  _formData: FormData,
+): Promise<void> {
+  const user = await requireSessionUserWithRole("FACULTY");
+  await assertFacultyOwnsCourseOffering(courseOfferingId, user.id);
+
+  await createNewAssessmentVersion(assessmentId, user.id);
   revalidatePath(`/faculty/courses/${courseOfferingId}/assessments/${assessmentId}`);
   revalidatePath(`/faculty/courses/${courseOfferingId}`);
 }

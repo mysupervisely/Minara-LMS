@@ -3,34 +3,40 @@ import { db } from "@/lib/db";
 import { recordAuditEvent } from "@/services/audit/audit";
 
 /**
- * Content lifecycle workflow — Milestone 13 (Curriculum Delivery
- * Vertical Slice), implementing
- * docs/milestones/milestone-12-curriculum-delivery-vertical-slice/02-content-lifecycle-workflow.md's
- * four-state machine: DRAFT → SUBMITTED → APPROVED → PUBLISHED.
+ * Content lifecycle workflow — Milestone 13 introduced the four-state
+ * machine (DRAFT → SUBMITTED → APPROVED → PUBLISHED); Milestone 14
+ * (Content Versioning Vertical Slice) re-targets every function in
+ * this module from the Lesson/Assessment row itself to a specific
+ * LessonVersion/AssessmentVersion row, per
+ * docs/milestones/milestone-11-curriculum-management-content-engine/04-versioning-strategy.md's
+ * entity/version split. This is the SAME state machine, reused exactly
+ * as it was — this milestone's own instruction is explicit: "Do not
+ * create a second workflow engine."
  *
- * A deliberate narrowing of Milestone 11's six-state Publishing
- * Workflow (Faculty Review and Curriculum Committee Review collapsed
- * into a single Program-Director-held review step; no Archive) — see
- * that document's README for the full rationale. Both Lesson and
- * Assessment definitions share this one state machine, mirroring the
- * approval-gate pattern already proven by
- * src/services/gradebook/gradebook.ts's Grade lifecycle (DRAFT →
- * SUBMITTED → APPROVED) rather than inventing a new shape.
+ * The one behavior genuinely new to this module is in publishContent:
+ * publishing a version is now two writes, not one — the version row
+ * itself moves to PUBLISHED (and gets its `publishedAt` stamp), and
+ * the *parent* Lesson/Assessment's `publishedVersionId` pointer is
+ * updated to name it as the live version. That parent-row write is the
+ * only thing that ever changes after a version reaches PUBLISHED — the
+ * version row itself is never written to again by any function here,
+ * which is what makes "Published Version 1 cannot be modified" true by
+ * construction, not just by convention.
  *
  * Creation and Draft-editing stay with their existing per-entity
  * modules (src/services/academic/institution.ts's createLesson/
- * updateLessonDraft, src/services/assessments/assessments.ts's
- * createAssessment/updateAssessmentDraft) — this module owns only the
- * state transitions and review-queue reads that are identical across
- * both content types, so the two entity types don't each need their
- * own copy of the same four functions.
+ * createNewLessonVersion/updateLessonVersionDraft,
+ * src/services/assessments/assessments.ts's createAssessment/
+ * createNewAssessmentVersion/updateAssessmentVersionDraft) — this
+ * module owns only the state transitions and review-queue reads that
+ * are identical across both content types.
  */
 
 export type ContentType = "LESSON" | "ASSESSMENT";
 
 const ENTITY_TYPE: Record<ContentType, string> = {
-  LESSON: "Lesson",
-  ASSESSMENT: "Assessment",
+  LESSON: "LessonVersion",
+  ASSESSMENT: "AssessmentVersion",
 };
 
 export class ContentStateError extends Error {
@@ -40,141 +46,202 @@ export class ContentStateError extends Error {
   }
 }
 
-async function findContentWithScope(contentType: ContentType, contentId: string) {
+/**
+ * Fetches a version row with the join path needed for authorization
+ * scope (…→ Course → Program) and the Lesson-only Competency
+ * requirement, dispatching per content type since LessonVersion and
+ * AssessmentVersion have different parent relations. Returned as a
+ * discriminated shape so the transition functions below never need a
+ * type assertion.
+ */
+async function findVersionWithScope(contentType: ContentType, versionId: string) {
   if (contentType === "LESSON") {
-    return db.lesson.findUnique({
-      where: { id: contentId },
-      include: { competencies: true, course: { select: { id: true, programId: true } } },
+    const version = await db.lessonVersion.findUnique({
+      where: { id: versionId },
+      include: { competencies: true, lesson: { include: { course: true } } },
     });
+    if (!version) return null;
+    return {
+      kind: "LESSON" as const,
+      version,
+      programId: version.lesson.course.programId,
+      parentId: version.lessonId,
+    };
   }
-  return db.assessment.findUnique({
-    where: { id: contentId },
-    include: { course: { select: { id: true, programId: true } } },
+
+  const version = await db.assessmentVersion.findUnique({
+    where: { id: versionId },
+    include: { assessment: { include: { course: true } } },
   });
+  if (!version) return null;
+  return {
+    kind: "ASSESSMENT" as const,
+    version,
+    programId: version.assessment.course.programId,
+    parentId: version.assessmentId,
+  };
 }
 
-async function updateContentStatus(
+async function updateVersionStatus(
   contentType: ContentType,
-  contentId: string,
-  data: { status: string; returnReason?: string | null },
+  versionId: string,
+  data: { status: string; returnReason?: string | null; publishedAt?: Date },
 ) {
   if (contentType === "LESSON") {
-    return db.lesson.update({ where: { id: contentId }, data });
+    return db.lessonVersion.update({ where: { id: versionId }, data });
   }
-  return db.assessment.update({ where: { id: contentId }, data });
+  return db.assessmentVersion.update({ where: { id: versionId }, data });
 }
 
 /**
  * Draft → Submitted for Review. Per the Product Requirements Document
- * (F-5), a Lesson must carry at least one Competency tag before it can
- * be submitted — Assessments have no such requirement, since their
- * Competency contribution is derived via their Course's Lessons (see
- * src/services/academic/competency.ts).
+ * (F-5), a Lesson Version must carry at least one Competency tag
+ * before it can be submitted — Assessment Versions have no such
+ * requirement, since their Competency contribution is derived via
+ * their Course's Lessons (see src/services/academic/competency.ts).
  */
 export async function submitContentForReview(
   contentType: ContentType,
-  contentId: string,
+  versionId: string,
   actorId: string,
 ) {
-  const content = await findContentWithScope(contentType, contentId);
-  if (!content) throw new ContentStateError("Content not found.");
-  if (content.status !== "DRAFT") {
-    throw new ContentStateError("Only Draft content can be submitted for review.");
+  const found = await findVersionWithScope(contentType, versionId);
+  if (!found) throw new ContentStateError("Content not found.");
+  if (found.version.status !== "DRAFT") {
+    throw new ContentStateError("Only a Draft version can be submitted for review.");
   }
-  if (contentType === "LESSON" && "competencies" in content && content.competencies.length === 0) {
+  if (found.kind === "LESSON" && found.version.competencies.length === 0) {
     throw new ContentStateError(
-      "Tag at least one Competency before submitting this Lesson for review.",
+      "Tag at least one Competency before submitting this Lesson Version for review.",
     );
   }
 
-  const updated = await updateContentStatus(contentType, contentId, {
+  const updated = await updateVersionStatus(contentType, versionId, {
     status: "SUBMITTED",
     returnReason: null,
   });
 
   await recordAuditEvent({
     actorId,
-    action: "CONTENT_SUBMITTED_FOR_REVIEW",
+    action: "VERSION_SUBMITTED",
     entityType: ENTITY_TYPE[contentType],
-    entityId: contentId,
+    entityId: versionId,
+    metadata: { versionNumber: found.version.versionNumber },
   });
 
   return updated;
 }
 
 /**
- * Submitted → Draft, with a required reason. Stored on the row itself
- * (not only in the Audit Log) since the Audit Log is Administrator-only
- * (ADR-005) and Faculty need to see why their own content was
- * returned — see the schema comment on Lesson/Assessment.
+ * Submitted → Draft, with a required reason. Stored on the version row
+ * itself (not only in the Audit Log) since the Audit Log is
+ * Administrator-only (ADR-005) and Faculty need to see why their own
+ * version was returned — see the schema comment on LessonVersion/
+ * AssessmentVersion. A returned version stays the version being
+ * edited — it is not archived or replaced, per this milestone's
+ * explicit "Return for Revision" requirement.
  */
 export async function returnContentToDraft(
   contentType: ContentType,
-  contentId: string,
+  versionId: string,
   reason: string,
   actorId: string,
 ) {
-  const content = await findContentWithScope(contentType, contentId);
-  if (!content) throw new ContentStateError("Content not found.");
-  if (content.status !== "SUBMITTED") {
-    throw new ContentStateError("Only content Submitted for Review can be returned.");
+  const found = await findVersionWithScope(contentType, versionId);
+  if (!found) throw new ContentStateError("Content not found.");
+  if (found.version.status !== "SUBMITTED") {
+    throw new ContentStateError("Only a version Submitted for Review can be returned.");
   }
   const trimmedReason = reason.trim();
   if (!trimmedReason) {
-    throw new ContentStateError("A reason is required when returning content for revision.");
+    throw new ContentStateError("A reason is required when returning a version for revision.");
   }
 
-  const updated = await updateContentStatus(contentType, contentId, {
+  const updated = await updateVersionStatus(contentType, versionId, {
     status: "DRAFT",
     returnReason: trimmedReason,
   });
 
   await recordAuditEvent({
     actorId,
-    action: "CONTENT_RETURNED_TO_DRAFT",
+    action: "VERSION_RETURNED",
     entityType: ENTITY_TYPE[contentType],
-    entityId: contentId,
-    metadata: { reason: trimmedReason },
+    entityId: versionId,
+    metadata: { reason: trimmedReason, versionNumber: found.version.versionNumber },
   });
 
   return updated;
 }
 
 /** Submitted → Approved. Program Director (or Administrator) authority, checked by the caller — see src/app/(portal)/program-director/actions.ts. */
-export async function approveContent(contentType: ContentType, contentId: string, actorId: string) {
-  const content = await findContentWithScope(contentType, contentId);
-  if (!content) throw new ContentStateError("Content not found.");
-  if (content.status !== "SUBMITTED") {
-    throw new ContentStateError("Only content Submitted for Review can be approved.");
+export async function approveContent(contentType: ContentType, versionId: string, actorId: string) {
+  const found = await findVersionWithScope(contentType, versionId);
+  if (!found) throw new ContentStateError("Content not found.");
+  if (found.version.status !== "SUBMITTED") {
+    throw new ContentStateError("Only a version Submitted for Review can be approved.");
   }
 
-  const updated = await updateContentStatus(contentType, contentId, { status: "APPROVED" });
+  const updated = await updateVersionStatus(contentType, versionId, { status: "APPROVED" });
 
   await recordAuditEvent({
     actorId,
-    action: "CONTENT_APPROVED",
+    action: "VERSION_APPROVED",
     entityType: ENTITY_TYPE[contentType],
-    entityId: contentId,
+    entityId: versionId,
+    metadata: { versionNumber: found.version.versionNumber },
   });
 
   return updated;
 }
 
-/** Approved → Published. Administrator-only authority, institution-wide, per Milestone 11's authority split — checked by the caller. */
-export async function publishContent(contentType: ContentType, contentId: string, actorId: string) {
-  const content = await findContentWithScope(contentType, contentId);
-  if (!content) throw new ContentStateError("Content not found.");
-  if (content.status !== "APPROVED") {
-    throw new ContentStateError("Only Approved content can be published.");
+/**
+ * Approved → Published. Administrator-only authority, institution-
+ * wide, per Milestone 11's authority split — checked by the caller.
+ *
+ * Two writes, deliberately in this order: (1) the version itself moves
+ * to PUBLISHED and receives its `publishedAt` timestamp — the last
+ * write this row will ever receive, by construction (every function in
+ * this module guards on `status !== "APPROVED"`/`!== "SUBMITTED"`/
+ * `!== "DRAFT"` before writing, so nothing can reach a PUBLISHED row
+ * again); (2) the parent Lesson/Assessment's `publishedVersionId`
+ * pointer is updated to this version's id — the single switch that
+ * makes it the version Students receive for new activity. A prior
+ * Published version's own row is never touched by this or any other
+ * step — it simply stops being the one the pointer names, which is
+ * exactly how "Published Version 1 remains immutable" and "Version 2
+ * becomes the active version" are both true at once.
+ */
+export async function publishContent(contentType: ContentType, versionId: string, actorId: string) {
+  const found = await findVersionWithScope(contentType, versionId);
+  if (!found) throw new ContentStateError("Content not found.");
+  if (found.version.status !== "APPROVED") {
+    throw new ContentStateError("Only an Approved version can be published.");
   }
 
-  const updated = await updateContentStatus(contentType, contentId, { status: "PUBLISHED" });
+  const publishedAt = new Date();
+  const updated = await updateVersionStatus(contentType, versionId, {
+    status: "PUBLISHED",
+    publishedAt,
+  });
+
+  if (contentType === "LESSON") {
+    await db.lesson.update({ where: { id: found.parentId }, data: { publishedVersionId: versionId } });
+  } else {
+    await db.assessment.update({
+      where: { id: found.parentId },
+      data: { publishedVersionId: versionId },
+    });
+  }
 
   await recordAuditEvent({
     actorId,
-    action: "CONTENT_PUBLISHED",
+    action: "VERSION_PUBLISHED",
     entityType: ENTITY_TYPE[contentType],
-    entityId: contentId,
+    entityId: versionId,
+    metadata: {
+      versionNumber: found.version.versionNumber,
+      [contentType === "LESSON" ? "lessonId" : "assessmentId"]: found.parentId,
+    },
   });
 
   return updated;
@@ -182,70 +249,89 @@ export async function publishContent(contentType: ContentType, contentId: string
 
 // ── Read helpers ────────────────────────────────────────────────────────
 
-/** A single Lesson with enough detail for the Faculty/Program Director review screens, including its Program (for authorization). */
-export async function getLessonForReview(lessonId: string) {
-  return db.lesson.findUnique({
-    where: { id: lessonId },
-    include: { course: { include: { program: true } }, competencies: true },
+/** A single Lesson Version with enough detail for the Faculty/Program Director review screens, including its Program (for authorization). */
+export async function getLessonVersionForReview(versionId: string) {
+  return db.lessonVersion.findUnique({
+    where: { id: versionId },
+    include: { competencies: true, lesson: { include: { course: { include: { program: true } } } } },
   });
 }
 
-/** A single Assessment with enough detail for the Faculty/Program Director review screens, including its Program (for authorization). */
-export async function getAssessmentForReview(assessmentId: string) {
-  return db.assessment.findUnique({
-    where: { id: assessmentId },
-    include: { course: { include: { program: true } } },
+/** A single Assessment Version with enough detail for the Faculty/Program Director review screens, including its Program (for authorization). */
+export async function getAssessmentVersionForReview(versionId: string) {
+  return db.assessmentVersion.findUnique({
+    where: { id: versionId },
+    include: { assessment: { include: { course: { include: { program: true } } } } },
   });
 }
 
-/** Every Lesson/Assessment Submitted for Review within a Program — the Program Director's content review queue. */
+/** Every Lesson/Assessment Version Submitted for Review within a Program — the Program Director's content review queue. */
 export async function listContentPendingReviewForProgram(programId: string) {
-  const [lessons, assessments] = await Promise.all([
-    db.lesson.findMany({
-      where: { status: "SUBMITTED", course: { programId } },
-      include: { course: true, competencies: true },
+  const [lessonVersions, assessmentVersions] = await Promise.all([
+    db.lessonVersion.findMany({
+      where: { status: "SUBMITTED", lesson: { course: { programId } } },
+      include: { lesson: { include: { course: true } }, competencies: true },
       orderBy: { createdAt: "asc" },
     }),
-    db.assessment.findMany({
-      where: { status: "SUBMITTED", course: { programId } },
-      include: { course: true },
+    db.assessmentVersion.findMany({
+      where: { status: "SUBMITTED", assessment: { course: { programId } } },
+      include: { assessment: { include: { course: true } } },
       orderBy: { createdAt: "asc" },
     }),
   ]);
-  return { lessons, assessments };
+  return { lessonVersions, assessmentVersions };
 }
 
 /**
- * Every Lesson/Assessment that is Approved but not yet Published —
- * Program Director's Curriculum Oversight view (scoped to their own
- * Program) when `programId` is given, and the Administrator's
- * institution-wide Publishing Queue when it's omitted.
+ * Every Lesson/Assessment Version that is Approved but not yet
+ * Published — Program Director's Curriculum Oversight view (scoped to
+ * their own Program) when `programId` is given, and the
+ * Administrator's institution-wide Publishing Queue when it's omitted.
  */
 export async function listApprovedContent(programId?: string) {
-  const [lessons, assessments] = await Promise.all([
-    db.lesson.findMany({
-      where: { status: "APPROVED", ...(programId ? { course: { programId } } : {}) },
-      include: { course: { include: { program: true } }, competencies: true },
+  const [lessonVersions, assessmentVersions] = await Promise.all([
+    db.lessonVersion.findMany({
+      where: {
+        status: "APPROVED",
+        ...(programId ? { lesson: { course: { programId } } } : {}),
+      },
+      include: { lesson: { include: { course: { include: { program: true } } } }, competencies: true },
       orderBy: { createdAt: "asc" },
     }),
-    db.assessment.findMany({
-      where: { status: "APPROVED", ...(programId ? { course: { programId } } : {}) },
-      include: { course: { include: { program: true } } },
+    db.assessmentVersion.findMany({
+      where: {
+        status: "APPROVED",
+        ...(programId ? { assessment: { course: { programId } } } : {}),
+      },
+      include: { assessment: { include: { course: { include: { program: true } } } } },
       orderBy: { createdAt: "asc" },
     }),
   ]);
-  return { lessons, assessments };
+  return { lessonVersions, assessmentVersions };
 }
 
-/** Every Lesson/Assessment for a Course, at every status — the Faculty content-authoring view (Track Curriculum Status). */
+/**
+ * Every Lesson/Assessment for a Course, each with its latest Version
+ * (per src/services/academic/institution.ts's getLatestLessonVersion,
+ * "the version currently being authored or reviewed" is always
+ * unambiguous, since only one non-Published version can exist per
+ * Lesson/Assessment at a time) — the Faculty content-authoring view
+ * (Track Curriculum Status).
+ */
 export async function listContentForCourse(courseId: string) {
   const [lessons, assessments] = await Promise.all([
     db.lesson.findMany({
       where: { courseId },
-      include: { competencies: true },
+      include: {
+        versions: { orderBy: { versionNumber: "desc" }, take: 1, include: { competencies: true } },
+      },
       orderBy: { order: "asc" },
     }),
-    db.assessment.findMany({ where: { courseId }, orderBy: { createdAt: "asc" } }),
+    db.assessment.findMany({
+      where: { courseId },
+      include: { versions: { orderBy: { versionNumber: "desc" }, take: 1 } },
+      orderBy: { createdAt: "asc" },
+    }),
   ]);
   return { lessons, assessments };
 }
