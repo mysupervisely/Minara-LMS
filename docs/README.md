@@ -42,6 +42,7 @@ Minara-Master-Plan):
 | 5 | [Domain Model & Data Architecture](./milestones/milestone-5-domain-model-data-architecture/README.md) | Draft |
 | 6 | [Technical Architecture & System Design](./milestones/milestone-6-technical-architecture/README.md) | Draft |
 | 7 | [MVP Definition & Implementation Planning](./milestones/milestone-7-mvp-definition-implementation-planning/README.md) | Draft |
-| 8 | *(Not yet started)* | — |
+| 8 | [Technology Stack & Development Architecture](./milestones/milestone-8-technology-stack-development-architecture/README.md) | Draft |
+| 9 | *(Not yet started)* | — |
 
-Milestone 8 will begin only after Milestone 7 is reviewed and approved.
+Milestone 9 will begin only after Milestone 8 is reviewed and approved.
