@@ -38,6 +38,7 @@ Minara-Master-Plan):
 | 1 | [Product Vision & Platform Strategy](./milestones/milestone-1-product-vision-platform-strategy/README.md) | Draft |
 | 2 | [User Roles & Permission Architecture](./milestones/milestone-2-user-roles-permission-architecture/README.md) | Draft |
 | 3 | [Student Journey & Core Platform Workflows](./milestones/milestone-3-student-journey-core-workflows/README.md) | Draft |
-| 4 | *(Not yet started)* | — |
+| 4 | [Information Architecture & User Experience](./milestones/milestone-4-information-architecture/README.md) | Draft |
+| 5 | *(Not yet started)* | — |
 
-Milestone 4 will begin only after Milestone 3 is reviewed and approved.
+Milestone 5 will begin only after Milestone 4 is reviewed and approved.
