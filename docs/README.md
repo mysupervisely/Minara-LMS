@@ -43,6 +43,7 @@ Minara-Master-Plan):
 | 6 | [Technical Architecture & System Design](./milestones/milestone-6-technical-architecture/README.md) | Draft |
 | 7 | [MVP Definition & Implementation Planning](./milestones/milestone-7-mvp-definition-implementation-planning/README.md) | Draft |
 | 8 | [Technology Stack & Development Architecture](./milestones/milestone-8-technology-stack-development-architecture/README.md) | Draft |
-| 9 | *(Not yet started)* | — |
+| 9 | [Engineering Foundation & Development Setup](./milestones/milestone-9-engineering-foundation-development-setup/README.md) | Draft |
 
-Milestone 9 will begin only after Milestone 8 is reviewed and approved.
+Actual implementation planning and development will begin only after
+Milestone 9 is reviewed and approved.
