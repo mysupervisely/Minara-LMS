@@ -49,6 +49,7 @@ Minara-Master-Plan):
 | 12 | [Curriculum Delivery Vertical Slice — Planning](./milestones/milestone-12-curriculum-delivery-vertical-slice/README.md) | Draft |
 | 13 | Curriculum Delivery Vertical Slice — Implementation — *implementation milestone, no documentation directory; see [repository root README](../README.md) and [Milestone 12's plan](./milestones/milestone-12-curriculum-delivery-vertical-slice/README.md)* | Implemented |
 | 14 | Content Versioning Vertical Slice — Implementation — *implementation milestone, no documentation directory; see [repository root README](../README.md)* | Implemented |
+| 15 | [Planning & Architecture Checkpoint](./milestones/milestone-15-externship-eligibility-placement-vertical-slice/README.md) | Draft |
 
 Milestones 1–9 and the ADR foundation are documentation-only. Milestone 10
 is this repository's first implementation milestone — a working, tested
