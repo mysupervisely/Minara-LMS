@@ -47,3 +47,17 @@ Minara-Master-Plan):
 
 Actual implementation planning and development will begin only after
 Milestone 9 is reviewed and approved.
+
+## Architecture Decision Records
+
+Alongside the milestone sequence, [`architecture/adr/`](./architecture/adr/README.md)
+holds the project's **Architecture Decision Records** — a small set of
+permanent, individually-citable records distilling the highest-impact,
+hardest-to-reverse decisions made across Milestones 1–9 (module
+architecture, SSR strategy, repository/ecosystem structure, domain-driven
+boundaries, RBAC/audit posture, AI governance, and more), including
+three decisions — the first launch Program, the system-of-record
+strategy, and the educational-record privacy scope — that formally
+resolve questions the milestones above had left open. See the
+[ADR README](./architecture/adr/README.md) for the full index and how
+ADRs relate to the milestone documentation.
