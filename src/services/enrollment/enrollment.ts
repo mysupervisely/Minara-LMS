@@ -91,6 +91,18 @@ export async function listCourseOfferingsForStudent(studentId: string) {
 export async function markLessonComplete(
   input: { studentId: string; lessonId: string },
 ) {
+  // Fail-closed, per this milestone's Product Requirements Document
+  // (S-1): a Student can only ever complete a Published Lesson, checked
+  // here at the service layer (the last line of defense) as well as by
+  // the page/action layer that reaches it.
+  const lesson = await db.lesson.findUnique({
+    where: { id: input.lessonId },
+    select: { status: true },
+  });
+  if (!lesson || lesson.status !== "PUBLISHED") {
+    throw new Error("This Lesson is not available.");
+  }
+
   const completion = await db.lessonCompletion.upsert({
     where: { studentId_lessonId: { studentId: input.studentId, lessonId: input.lessonId } },
     update: {},

@@ -21,8 +21,11 @@ export default async function StudentAssessmentPage({
   const allowed = await studentCanAccessCourseOffering(user.id, courseOfferingId);
   if (!allowed) notFound();
 
+  // Fail-closed, per this milestone's Product Requirements Document
+  // (S-1) — see the matching service-layer check in
+  // src/services/assessments/assessments.ts's submitAssessment.
   const assessment = await db.assessment.findUnique({ where: { id: assessmentId } });
-  if (!assessment) notFound();
+  if (!assessment || assessment.status !== "PUBLISHED") notFound();
 
   const submission = await getSubmissionForStudent(assessmentId, user.id);
   const boundSubmit = submitAssessmentAction.bind(null, courseOfferingId, assessmentId);

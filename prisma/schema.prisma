@@ -154,8 +154,35 @@ model Program {
   courses         Course[]
   enrollments     Enrollment[]
   roleAssignments RoleAssignment[]
+  competencies    Competency[]
 
   @@map("programs")
+}
+
+// Milestone 13 (Curriculum Delivery Vertical Slice) — the one new
+// domain concept the slice introduces, kept deliberately minimal per
+// docs/milestones/milestone-12-curriculum-delivery-vertical-slice/03-domain-impact-review.md:
+// a simple, Program-scoped named record. This is NOT the full
+// Milestone 11 four-level chain (Course Outcome → Program Competency →
+// Program Learning Outcome → Institution Mission) — it stands in for
+// the bottom of that chain only, so the slice can prove a Grade
+// Approval moving a competency signal end to end without modeling the
+// rest of the hierarchy yet.
+model Competency {
+  id        String   @id @default(cuid())
+  programId String
+  program   Program  @relation(fields: [programId], references: [id])
+  name      String
+  createdAt DateTime @default(now())
+
+  // A Lesson links to one or more Competencies directly (Milestone 11's
+  // Lesson → Course Outcome link, simplified to one join instead of
+  // two). Assessment has no direct Competency link — its contribution
+  // to Competency Progress is derived via the Lessons of the Course it
+  // belongs to; see src/services/academic/competency.ts.
+  lessons Lesson[]
+
+  @@map("competencies")
 }
 
 model Cohort {
@@ -215,16 +242,32 @@ model CourseOffering {
   @@map("course_offerings")
 }
 
+// status: Milestone 13's content lifecycle — DRAFT → SUBMITTED →
+// APPROVED → PUBLISHED, per
+// docs/milestones/milestone-12-curriculum-delivery-vertical-slice/02-content-lifecycle-workflow.md.
+// A deliberate narrowing of Milestone 11's six-state Publishing
+// Workflow (no separate Faculty-Review/Committee-Review split, no
+// Archive) — see that document for the full rationale. Every
+// Student-facing read path filters to status == PUBLISHED; Faculty/
+// Program Director/Administrator see every status. returnReason holds
+// the Program Director's required explanation when content is
+// returned to Draft — stored on the row itself (not only in the Audit
+// Log) because the Audit Log is Administrator-only visibility
+// (ADR-005), and Faculty need to see why their own content was
+// returned.
 model Lesson {
-  id        String   @id @default(cuid())
-  courseId  String
-  course    Course   @relation(fields: [courseId], references: [id])
-  title     String
-  content   String
-  order     Int      @default(0)
-  createdAt DateTime @default(now())
+  id           String   @id @default(cuid())
+  courseId     String
+  course       Course   @relation(fields: [courseId], references: [id])
+  title        String
+  content      String
+  order        Int      @default(0)
+  status       String   @default("DRAFT")
+  returnReason String?
+  createdAt    DateTime @default(now())
 
-  completions LessonCompletion[]
+  completions  LessonCompletion[]
+  competencies Competency[]
 
   @@map("lessons")
 }
@@ -236,6 +279,8 @@ model Assessment {
   title        String
   instructions String
   maxScore     Int      @default(100)
+  status       String   @default("DRAFT")
+  returnReason String?
   createdAt    DateTime @default(now())
 
   submissions Submission[]

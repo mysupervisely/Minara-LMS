@@ -18,7 +18,8 @@ export async function resetDatabase() {
   await db.session.deleteMany();
   await db.courseOffering.deleteMany();
   await db.assessment.deleteMany();
-  await db.lesson.deleteMany();
+  await db.lesson.deleteMany(); // cascades the implicit _CompetencyToLesson join rows
+  await db.competency.deleteMany();
   await db.course.deleteMany();
   await db.cohort.deleteMany();
   await db.program.deleteMany();

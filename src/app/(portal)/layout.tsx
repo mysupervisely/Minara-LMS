@@ -30,6 +30,7 @@ export default async function PortalLayout({ children }: { children: React.React
             links={[
               { href: "/student", label: "Dashboard" },
               { href: "/student/grades", label: "My Grades" },
+              { href: "/student/competencies", label: "My Competencies" },
             ]}
           />
         )}
@@ -42,7 +43,10 @@ export default async function PortalLayout({ children }: { children: React.React
         {roles.includes("PROGRAM_DIRECTOR") && (
           <PortalNavSection
             heading="Program Director"
-            links={[{ href: "/program-director", label: "Approvals" }]}
+            links={[
+              { href: "/program-director", label: "Grade Approvals" },
+              { href: "/program-director/content", label: "Curriculum Review" },
+            ]}
           />
         )}
         {roles.includes("ADMINISTRATOR") && (
@@ -51,6 +55,8 @@ export default async function PortalLayout({ children }: { children: React.React
             links={[
               { href: "/admin", label: "Overview" },
               { href: "/admin/institution", label: "Institution Structure" },
+              { href: "/admin/competencies", label: "Competencies" },
+              { href: "/admin/content", label: "Publishing Queue" },
               { href: "/admin/users", label: "Users & Roles" },
               { href: "/admin/enrollments", label: "Enrollments" },
               { href: "/admin/audit", label: "Audit Log" },

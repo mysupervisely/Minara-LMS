@@ -19,8 +19,13 @@ export default async function StudentLessonPage({
   const allowed = await studentCanAccessCourseOffering(user.id, courseOfferingId);
   if (!allowed) notFound();
 
+  // Fail-closed, per this milestone's Product Requirements Document
+  // (S-1): a direct request for a non-Published Lesson's URL is denied,
+  // not just absent from the course's Lesson list — see
+  // src/services/enrollment/enrollment.ts's markLessonComplete for the
+  // matching service-layer check on the write path.
   const lesson = await db.lesson.findUnique({ where: { id: lessonId } });
-  if (!lesson) notFound();
+  if (!lesson || lesson.status !== "PUBLISHED") notFound();
 
   const completion = await db.lessonCompletion.findUnique({
     where: { studentId_lessonId: { studentId: user.id, lessonId } },

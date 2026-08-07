@@ -11,6 +11,12 @@ import {
 } from "@/services/academic/institution";
 import { createAssessment } from "@/services/assessments/assessments";
 import { createEnrollment } from "@/services/enrollment/enrollment";
+import { createCompetency } from "@/services/academic/competency";
+import {
+  submitContentForReview,
+  approveContent,
+  publishContent,
+} from "@/services/academic/content-workflow";
 
 /**
  * Test fixtures — deliberately built through the real service functions
@@ -68,8 +74,17 @@ export async function buildAcademicStructure(actorId: string) {
     { courseId: course.id, cohortId: cohort.id, term: "Test Term" },
     actorId,
   );
+  const competency = await createCompetency(
+    { programId: program.id, name: "Test Competency" },
+    actorId,
+  );
   const lesson = await createLesson(
-    { courseId: course.id, title: "Lesson One", content: "Lesson content." },
+    {
+      courseId: course.id,
+      title: "Lesson One",
+      content: "Lesson content.",
+      competencyIds: [competency.id],
+    },
     actorId,
   );
   const assessment = await createAssessment(
@@ -77,7 +92,35 @@ export async function buildAcademicStructure(actorId: string) {
     actorId,
   );
 
-  return { institution, school, program, cohort, course, courseOffering, lesson, assessment };
+  // Milestone 13's content lifecycle defaults every Lesson/Assessment
+  // to Draft (see prisma/schema.prisma) — every existing (Milestone
+  // 10) test in this suite presumes content is already deliverable, so
+  // this shared fixture walks both through Draft → Submitted →
+  // Approved → Published here, using the same service functions the
+  // real Faculty/Program Director/Administrator workflow uses (per
+  // this fixture module's own "built through the real service
+  // functions" convention). Tests that specifically exercise the
+  // content lifecycle itself (tests/content-*.test.ts) build their own
+  // Draft-status content directly via createLesson/createAssessment
+  // instead of this fixture.
+  await submitContentForReview("LESSON", lesson.id, actorId);
+  await approveContent("LESSON", lesson.id, actorId);
+  await publishContent("LESSON", lesson.id, actorId);
+  await submitContentForReview("ASSESSMENT", assessment.id, actorId);
+  await approveContent("ASSESSMENT", assessment.id, actorId);
+  await publishContent("ASSESSMENT", assessment.id, actorId);
+
+  return {
+    institution,
+    school,
+    program,
+    cohort,
+    course,
+    courseOffering,
+    lesson,
+    assessment,
+    competency,
+  };
 }
 
 /** A full, ready-to-use scenario: one Program with one Course Offering, an enrolled Student, an assigned Faculty Instructor, and a Program Director overseeing the Program. */

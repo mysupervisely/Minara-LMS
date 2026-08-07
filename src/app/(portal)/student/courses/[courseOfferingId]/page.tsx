@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { requireSessionUserWithRole } from "@/services/identity/authorization";
-import { getCourseOfferingById } from "@/services/academic/institution";
+import { getCourseOfferingForStudent } from "@/services/academic/institution";
 import {
   studentCanAccessCourseOffering,
   getLessonCompletionsForStudent,
@@ -22,7 +22,7 @@ export default async function StudentCoursePage({
   const allowed = await studentCanAccessCourseOffering(user.id, courseOfferingId);
   if (!allowed) notFound();
 
-  const offering = await getCourseOfferingById(courseOfferingId);
+  const offering = await getCourseOfferingForStudent(courseOfferingId);
   if (!offering) notFound();
 
   const completions = await getLessonCompletionsForStudent(user.id, offering.course.id);

@@ -12,6 +12,14 @@
  * "configuration-driven design" instruction. This script is simply one
  * chosen configuration, run once, for demonstration purposes.
  *
+ * Milestone 13 update: Lessons and the Assessment are now drafted by
+ * Faculty, walked through Submitted → Approved → Published by Program
+ * Director and Administrator (the same service functions the real
+ * portal screens use), and one Grade is carried all the way to
+ * Approved — so a freshly seeded database demonstrates the full
+ * Curriculum Delivery Vertical Slice lifecycle out of the box, not just
+ * its Draft state.
+ *
  * Run with: npm run db:seed
  * Safe to re-run against an empty database; not idempotent against a
  * database that already has data (it will create duplicates or fail on
@@ -29,8 +37,15 @@ import {
   createCourseOffering,
   createLesson,
 } from "../src/services/academic/institution";
-import { createAssessment } from "../src/services/assessments/assessments";
+import { createAssessment, submitAssessment } from "../src/services/assessments/assessments";
 import { createEnrollment } from "../src/services/enrollment/enrollment";
+import { createCompetency } from "../src/services/academic/competency";
+import {
+  submitContentForReview,
+  approveContent,
+  publishContent,
+} from "../src/services/academic/content-workflow";
+import { enterGrade, submitGradeForApproval, approveGrade } from "../src/services/gradebook/gradebook";
 import { db } from "../src/lib/db";
 
 const DEMO_PASSWORD = "minara-demo-2026";
@@ -81,40 +96,9 @@ async function main() {
     admin.id,
   );
 
-  await createLesson(
-    {
-      courseId: course.id,
-      title: "Introduction to Drug Classifications",
-      content:
-        "This lesson introduces the major drug classification systems used in pharmacy practice, " +
-        "including therapeutic classification, mechanism of action, and controlled substance schedules.",
-    },
-    admin.id,
-  );
-  await createLesson(
-    {
-      courseId: course.id,
-      title: "Dosage Calculations",
-      content:
-        "This lesson covers the core dosage calculation methods a pharmacy technician uses daily: " +
-        "ratio-proportion, dimensional analysis, and body-weight-based dosing.",
-    },
-    admin.id,
-  );
-
-  const assessment = await createAssessment(
-    {
-      courseId: course.id,
-      title: "Pharmacology Fundamentals — Quiz 1",
-      instructions:
-        "In your own words, explain the difference between therapeutic classification and mechanism " +
-        "of action, and give one example of each.",
-      maxScore: 100,
-    },
-    admin.id,
-  );
-
-  // 3. Faculty, Program Director, and Students.
+  // 3. Faculty and Program Director — created before content so the
+  // Curriculum Delivery Vertical Slice below is authored/reviewed by
+  // the same accounts a real Faculty/Program Director would use.
   const faculty = await createUser(
     { name: "Fatima Faculty", email: "faculty@minara.edu", password: DEMO_PASSWORD, actorId: admin.id },
   );
@@ -138,6 +122,67 @@ async function main() {
     actorId: admin.id,
   });
 
+  // 4. Competency, and Curriculum content drafted by Faculty — Milestone
+  // 13's Curriculum Delivery Vertical Slice.
+  const competency = await createCompetency(
+    { programId: program.id, name: "Identify drug classification systems" },
+    admin.id,
+  );
+  const dosageCompetency = await createCompetency(
+    { programId: program.id, name: "Perform pharmacy dosage calculations" },
+    admin.id,
+  );
+
+  const lesson1 = await createLesson(
+    {
+      courseId: course.id,
+      title: "Introduction to Drug Classifications",
+      content:
+        "This lesson introduces the major drug classification systems used in pharmacy practice, " +
+        "including therapeutic classification, mechanism of action, and controlled substance schedules.",
+      competencyIds: [competency.id],
+    },
+    faculty.id,
+  );
+  const lesson2 = await createLesson(
+    {
+      courseId: course.id,
+      title: "Dosage Calculations",
+      content:
+        "This lesson covers the core dosage calculation methods a pharmacy technician uses daily: " +
+        "ratio-proportion, dimensional analysis, and body-weight-based dosing.",
+      competencyIds: [dosageCompetency.id],
+    },
+    faculty.id,
+  );
+  const assessment = await createAssessment(
+    {
+      courseId: course.id,
+      title: "Pharmacology Fundamentals — Quiz 1",
+      instructions:
+        "In your own words, explain the difference between therapeutic classification and mechanism " +
+        "of action, and give one example of each.",
+      maxScore: 100,
+    },
+    faculty.id,
+  );
+
+  // Walk each item through Draft → Submitted → Approved → Published,
+  // through the same content-workflow.ts functions the Faculty/Program
+  // Director/Administrator portal screens call.
+  for (const contentId of [lesson1.id, lesson2.id]) {
+    await submitContentForReview("LESSON", contentId, faculty.id);
+    await approveContent("LESSON", contentId, programDirector.id);
+    await publishContent("LESSON", contentId, admin.id);
+  }
+  await submitContentForReview("ASSESSMENT", assessment.id, faculty.id);
+  await approveContent("ASSESSMENT", assessment.id, programDirector.id);
+  await publishContent("ASSESSMENT", assessment.id, admin.id);
+
+  // 5. Student — enrolled, then carried through Assessment Submission →
+  // Grade Entry → Grade Approval, so the seeded database demonstrates a
+  // Competency Progress signal (src/services/academic/competency.ts)
+  // out of the box, not just Published content with nothing done yet.
   const student = await createUser({
     name: "Sam Student",
     email: "student@minara.edu",
@@ -148,6 +193,23 @@ async function main() {
     { studentId: student.id, programId: program.id, cohortId: cohort.id },
     admin.id,
   );
+
+  const submission = await submitAssessment({
+    assessmentId: assessment.id,
+    studentId: student.id,
+    courseOfferingId: courseOffering.id,
+    content:
+      "Therapeutic classification groups drugs by what condition they treat (e.g., antihypertensives); " +
+      "mechanism of action groups drugs by how they work at the cellular level (e.g., ACE inhibitors).",
+  });
+  const grade = await enterGrade({
+    submissionId: submission.id,
+    score: 95,
+    feedback: "Clear and accurate — nice work.",
+    enteredById: faculty.id,
+  });
+  await submitGradeForApproval(grade.id, faculty.id);
+  await approveGrade(grade.id, programDirector.id);
 
   console.log("Seed complete. Demo accounts (all use the same password):\n");
   console.log(`  Administrator     admin@minara.edu`);

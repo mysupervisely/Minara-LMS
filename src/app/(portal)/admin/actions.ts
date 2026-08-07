@@ -16,6 +16,12 @@ import { createAssessment } from "@/services/assessments/assessments";
 import { createUser, assignRole } from "@/services/identity/users";
 import { createEnrollment } from "@/services/enrollment/enrollment";
 import { RoleSchema } from "@/domain/roles";
+import {
+  type ContentType,
+  publishContent,
+  ContentStateError,
+} from "@/services/academic/content-workflow";
+import { createCompetency } from "@/services/academic/competency";
 
 export interface ActionState {
   error?: string;
@@ -308,4 +314,55 @@ export async function createEnrollmentAction(
 
   revalidatePath("/admin/enrollments");
   return { success: "Enrollment created." };
+}
+
+// ── Content publishing & Competency — Milestone 13 ─────────────────────────
+//
+// Administrator "Publish curriculum" capability, per
+// docs/milestones/milestone-12-curriculum-delivery-vertical-slice/04-portal-impact-review.md.
+// Publish is institution-wide Administrator authority, distinct from
+// Program-scoped Approval — the same authority split Milestone 11's
+// Publishing Workflow establishes.
+
+/**
+ * Bound to a plain `<form action={...}>` — see approveGradeAction's
+ * comment in src/app/(portal)/program-director/actions.ts for why this
+ * throws rather than returning a state.
+ */
+export async function publishContentAction(
+  contentType: ContentType,
+  contentId: string,
+  _formData: FormData,
+): Promise<void> {
+  const user = await requireAdmin();
+
+  try {
+    await publishContent(contentType, contentId, user.id);
+  } catch (error) {
+    if (error instanceof ContentStateError) throw new Error(error.message);
+    throw error;
+  }
+
+  revalidatePath("/admin/content");
+}
+
+const CompetencySchema = z.object({
+  programId: z.string().min(1, "Select a Program."),
+  name: z.string().trim().min(1, "Name is required."),
+});
+
+export async function createCompetencyAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const user = await requireAdmin();
+  const parsed = CompetencySchema.safeParse({
+    programId: formData.get("programId"),
+    name: formData.get("name"),
+  });
+  if (!parsed.success) return { error: firstIssue(parsed.error) };
+
+  await createCompetency(parsed.data, user.id);
+  revalidatePath("/admin/competencies");
+  return { success: "Competency created." };
 }

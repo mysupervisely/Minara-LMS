@@ -44,7 +44,19 @@ export type AuditAction =
   | "GRADE_ENTERED"
   | "GRADE_SUBMITTED_FOR_APPROVAL"
   | "GRADE_APPROVED"
-  | "GRADE_REJECTED";
+  | "GRADE_REJECTED"
+  // Milestone 13 — Curriculum Delivery Vertical Slice: the content
+  // lifecycle (Draft → Submitted → Approved → Published), per
+  // docs/milestones/milestone-12-curriculum-delivery-vertical-slice/02-content-lifecycle-workflow.md.
+  // "Content created" is already covered by LESSON_CREATED /
+  // ASSESSMENT_CREATED above — these four cover the rest of that
+  // milestone's required audit list ("submitted, approved, published"),
+  // plus the required Return-with-reason step.
+  | "CONTENT_SUBMITTED_FOR_REVIEW"
+  | "CONTENT_RETURNED_TO_DRAFT"
+  | "CONTENT_APPROVED"
+  | "CONTENT_PUBLISHED"
+  | "COMPETENCY_CREATED";
 
 export interface RecordAuditEventInput {
   /** The acting User's id, or null for a system-initiated event (e.g. a failed login for an unknown email). */

@@ -125,7 +125,14 @@ export async function createCourseOffering(
 }
 
 export async function createLesson(
-  input: { courseId: string; title: string; content: string; order?: number },
+  input: {
+    courseId: string;
+    title: string;
+    content: string;
+    order?: number;
+    /** Milestone 13: Competencies this Lesson teaches toward, per src/services/academic/competency.ts. Optional at creation — required before submission for review, enforced in content-workflow.ts. */
+    competencyIds?: string[];
+  },
   actorId: string,
 ) {
   const lesson = await db.lesson.create({
@@ -134,6 +141,9 @@ export async function createLesson(
       title: input.title,
       content: input.content,
       order: input.order ?? 0,
+      competencies: input.competencyIds?.length
+        ? { connect: input.competencyIds.map((id) => ({ id })) }
+        : undefined,
     },
   });
   await recordAuditEvent({
@@ -144,6 +154,40 @@ export async function createLesson(
     metadata: { title: input.title },
   });
   return lesson;
+}
+
+/**
+ * Milestone 13: edits a Lesson's content while it is still Draft — the
+ * Faculty "Edit lesson" capability. Mirrors the Grade lifecycle's
+ * "DRAFT-only editable" rule (src/services/gradebook/gradebook.ts's
+ * enterGrade): once Submitted for Review, a Lesson must be Returned
+ * before it can be edited again. No separate audit event is emitted
+ * for the edit itself — only the lifecycle transitions in
+ * content-workflow.ts are audited, per this milestone's Content
+ * Lifecycle Workflow document.
+ */
+export async function updateLessonDraft(
+  input: {
+    lessonId: string;
+    title: string;
+    content: string;
+    competencyIds: string[];
+  },
+) {
+  const lesson = await db.lesson.findUnique({ where: { id: input.lessonId } });
+  if (!lesson) throw new Error("Lesson not found.");
+  if (lesson.status !== "DRAFT") {
+    throw new Error("Only Draft Lessons can be edited. Submitted, Approved, and Published content is read-only.");
+  }
+
+  return db.lesson.update({
+    where: { id: input.lessonId },
+    data: {
+      title: input.title,
+      content: input.content,
+      competencies: { set: input.competencyIds.map((id) => ({ id })) },
+    },
+  });
 }
 
 // ── Read helpers ────────────────────────────────────────────────────────
@@ -219,6 +263,31 @@ export async function getCourseOfferingById(courseOfferingId: string) {
     where: { id: courseOfferingId },
     include: {
       course: { include: { lessons: { orderBy: { order: "asc" } }, assessments: true, program: true } },
+      cohort: true,
+    },
+  });
+}
+
+/**
+ * Milestone 13: the Student-facing equivalent of getCourseOfferingById,
+ * filtered to Published content only — per
+ * docs/milestones/milestone-12-curriculum-delivery-vertical-slice/02-content-lifecycle-workflow.md,
+ * a Student never sees Draft/Submitted/Approved-but-unpublished
+ * content, even in a list. getCourseOfferingById itself is unchanged
+ * and continues to serve Faculty/Program Director/Administrator, who
+ * need to see every status for authoring and review.
+ */
+export async function getCourseOfferingForStudent(courseOfferingId: string) {
+  return db.courseOffering.findUnique({
+    where: { id: courseOfferingId },
+    include: {
+      course: {
+        include: {
+          lessons: { where: { status: "PUBLISHED" }, orderBy: { order: "asc" } },
+          assessments: { where: { status: "PUBLISHED" } },
+          program: true,
+        },
+      },
       cohort: true,
     },
   });

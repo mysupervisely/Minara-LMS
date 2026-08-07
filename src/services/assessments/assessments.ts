@@ -36,12 +36,52 @@ export async function createAssessment(
   return assessment;
 }
 
+/**
+ * Milestone 13: edits an Assessment definition's instructions/max
+ * score while it is still Draft — the Assessment counterpart to
+ * src/services/academic/institution.ts's updateLessonDraft. Assessment
+ * has no Competency link of its own (see
+ * src/services/academic/competency.ts's module comment), so there is
+ * nothing else to edit here.
+ */
+export async function updateAssessmentDraft(input: {
+  assessmentId: string;
+  title: string;
+  instructions: string;
+  maxScore: number;
+}) {
+  const assessment = await db.assessment.findUnique({ where: { id: input.assessmentId } });
+  if (!assessment) throw new Error("Assessment not found.");
+  if (assessment.status !== "DRAFT") {
+    throw new Error(
+      "Only Draft Assessments can be edited. Submitted, Approved, and Published content is read-only.",
+    );
+  }
+
+  return db.assessment.update({
+    where: { id: input.assessmentId },
+    data: { title: input.title, instructions: input.instructions, maxScore: input.maxScore },
+  });
+}
+
 export async function submitAssessment(input: {
   assessmentId: string;
   studentId: string;
   courseOfferingId: string;
   content: string;
 }) {
+  // Fail-closed, per this milestone's Product Requirements Document
+  // (S-1): a Student can only ever submit against a Published
+  // Assessment, checked here at the service layer (the last line of
+  // defense) as well as by the page/action layer that reaches it.
+  const assessment = await db.assessment.findUnique({
+    where: { id: input.assessmentId },
+    select: { status: true },
+  });
+  if (!assessment || assessment.status !== "PUBLISHED") {
+    throw new Error("This Assessment is not available.");
+  }
+
   const enrollment = await findEnrollmentForCourseOffering(
     input.studentId,
     input.courseOfferingId,

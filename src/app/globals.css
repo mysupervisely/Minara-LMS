@@ -358,6 +358,14 @@ legend {
   padding: 0 var(--space-2);
 }
 
+.checkbox-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+  font-weight: 400;
+}
+
 .alert {
   padding: var(--space-3) var(--space-4);
   border-radius: var(--radius);
@@ -406,6 +414,12 @@ legend {
 .badge--active {
   background: var(--color-success-bg);
   color: var(--color-success-text);
+}
+
+.badge--published {
+  background: var(--color-accent-bg, #e7ecff);
+  color: var(--color-accent-text, #2a3a8c);
+  border: 1px solid currentColor;
 }
 
 .stack {

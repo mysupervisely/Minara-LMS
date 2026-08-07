@@ -46,7 +46,8 @@ Minara-Master-Plan):
 | 9 | [Engineering Foundation & Development Setup](./milestones/milestone-9-engineering-foundation-development-setup/README.md) | Draft |
 | 10 | Foundation Build — *implementation milestone, no documentation directory; see [repository root README](../README.md) and [ADR README](./architecture/adr/README.md)* | Implemented |
 | 11 | [Curriculum Management & Content Engine](./milestones/milestone-11-curriculum-management-content-engine/README.md) | Draft |
-| 12 | [Curriculum Delivery Vertical Slice](./milestones/milestone-12-curriculum-delivery-vertical-slice/README.md) | Draft |
+| 12 | [Curriculum Delivery Vertical Slice — Planning](./milestones/milestone-12-curriculum-delivery-vertical-slice/README.md) | Draft |
+| 13 | Curriculum Delivery Vertical Slice — Implementation — *implementation milestone, no documentation directory; see [repository root README](../README.md) and [Milestone 12's plan](./milestones/milestone-12-curriculum-delivery-vertical-slice/README.md)* | Implemented |
 
 Milestones 1–9 and the ADR foundation are documentation-only. Milestone 10
 is this repository's first implementation milestone — a working, tested
@@ -58,9 +59,10 @@ Content Engine. Milestone 12 is also documentation-only: per
 [ADR-011](./architecture/adr/ADR-011-vertical-slice-development-strategy.md),
 it plans a single, narrow, end-to-end slice through Milestone 11's design
 — proving the architecture against Milestone 10's implemented foundation
-before any broader engine build begins. Implementation against either
-Milestone 11 or Milestone 12 begins only after each is reviewed and
-approved.
+before any broader engine build begins. Milestone 13 implements that
+plan (again application code, no `docs/milestones/` directory of its
+own). Implementation against the remainder of Milestone 11's full engine
+begins only after it, too, is reviewed and approved.
 
 ## Architecture Decision Records
 

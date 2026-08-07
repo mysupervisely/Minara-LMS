@@ -1,6 +1,6 @@
 # Minara-LMS
 
-**Status:** Milestone 10 (Foundation Build) implemented · Milestones 11 (Curriculum Management & Content Engine) and 12 (Curriculum Delivery Vertical Slice) documentation drafted, pending approval
+**Status:** Milestones 10 (Foundation Build) and 13 (Curriculum Delivery Vertical Slice) implemented · Milestone 11 (Curriculum Management & Content Engine) documentation drafted, pending approval
 **Last Updated:** 2026-08-07
 
 ## What This Repository Is
@@ -54,16 +54,25 @@ No application code changes were made for Milestone 11; implementation
 against it begins only after review and approval.
 
 **Milestone 12 — Curriculum Delivery Vertical Slice — documentation
-drafted, pending approval.** Per
+drafted, pending approval, now implemented as Milestone 13.** Per
 [ADR-011](./docs/architecture/adr/ADR-011-vertical-slice-development-strategy.md),
-plans the next narrow, end-to-end slice through Milestone 11's design —
-Faculty/Admin content authoring → approval → publish → Student
-consumption → completion → assessment → grade → competency progress →
-audit trail — proving Milestone 11's architecture against Milestone 10's
-implemented foundation before any broader engine build begins. See
-[docs/milestones/milestone-12-curriculum-delivery-vertical-slice/](./docs/milestones/milestone-12-curriculum-delivery-vertical-slice/README.md).
-No application code changes were made for Milestone 12 either;
-implementation begins only after review and approval.
+planned the next narrow, end-to-end slice through Milestone 11's design.
+See
+[docs/milestones/milestone-12-curriculum-delivery-vertical-slice/](./docs/milestones/milestone-12-curriculum-delivery-vertical-slice/README.md)
+for the plan; no application code changes were made under Milestone 12
+itself.
+
+**Milestone 13 — Curriculum Delivery Vertical Slice — implemented.**
+Builds Milestone 12's plan: Faculty draft a Lesson/Assessment tagged
+with a Competency → Program Director reviews (approve or return with a
+required reason) → Administrator publishes → enrolled Students see and
+complete Published content, submit Assessments, and see a Competency
+Progress signal once their Grade is approved — every step audit-logged.
+A deliberate narrowing of Milestone 11's full engine (single-track
+review, no content versioning, one minimal Competency link, no Question
+Banks) — see
+[docs/milestones/milestone-12-curriculum-delivery-vertical-slice/03-domain-impact-review.md](./docs/milestones/milestone-12-curriculum-delivery-vertical-slice/03-domain-impact-review.md)
+for exactly what was, and deliberately was not, built.
 
 ## Documentation
 
@@ -86,6 +95,6 @@ Open [http://localhost:3000](http://localhost:3000). See
 for the full environment strategy this local setup implements.
 
 ```bash
-npm test                 # runs the Vitest suite (auth, RBAC, and workflow tests)
+npm test                 # runs the Vitest suite (auth, RBAC, curriculum delivery, and workflow tests)
 npm run build             # production build
 ```

@@ -8,6 +8,7 @@ import {
   listRosterForCourseOffering,
 } from "@/services/academic/institution";
 import { listSubmissionsForCourseOffering } from "@/services/assessments/assessments";
+import { listContentForCourse } from "@/services/academic/content-workflow";
 
 export const metadata: Metadata = { title: "Section" };
 
@@ -29,6 +30,8 @@ export default async function FacultyCoursePage({
   ]);
   if (!offering) notFound();
 
+  const { lessons, assessments } = await listContentForCourse(offering.course.id);
+
   return (
     <div className="stack">
       <p className="muted">
@@ -38,6 +41,59 @@ export default async function FacultyCoursePage({
       <p className="muted">
         {offering.cohort.name} &middot; {offering.term}
       </p>
+
+      <section style={{ padding: 0, border: "none" }}>
+        <h2>Curriculum</h2>
+        <p className="muted">
+          Draft, review, and publish this Course&rsquo;s Lessons and Assessments — per{" "}
+          <Link href="/admin/audit">the Audit Log</Link>, every step is tracked.
+        </p>
+
+        <h3>Lessons</h3>
+        {lessons.length === 0 ? (
+          <p className="muted">No Lessons yet.</p>
+        ) : (
+          <ul>
+            {lessons.map((lesson) => (
+              <li key={lesson.id}>
+                <Link href={`/faculty/courses/${courseOfferingId}/lessons/${lesson.id}`}>
+                  {lesson.title}
+                </Link>{" "}
+                <span className={`badge badge--${lesson.status.toLowerCase()}`}>{lesson.status}</span>
+                {lesson.competencies.length === 0 ? (
+                  <span className="muted"> &middot; no Competency tagged</span>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        )}
+        <p>
+          <Link href={`/faculty/courses/${courseOfferingId}/lessons/new`}>+ Draft a new Lesson</Link>
+        </p>
+
+        <h3>Assessments</h3>
+        {assessments.length === 0 ? (
+          <p className="muted">No Assessments yet.</p>
+        ) : (
+          <ul>
+            {assessments.map((assessment) => (
+              <li key={assessment.id}>
+                <Link href={`/faculty/courses/${courseOfferingId}/assessments/${assessment.id}`}>
+                  {assessment.title}
+                </Link>{" "}
+                <span className={`badge badge--${assessment.status.toLowerCase()}`}>
+                  {assessment.status}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+        <p>
+          <Link href={`/faculty/courses/${courseOfferingId}/assessments/new`}>
+            + Draft a new Assessment
+          </Link>
+        </p>
+      </section>
 
       <section style={{ padding: 0, border: "none" }}>
         <h2>Roster</h2>
