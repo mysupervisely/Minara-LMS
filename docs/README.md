@@ -44,9 +44,17 @@ Minara-Master-Plan):
 | 7 | [MVP Definition & Implementation Planning](./milestones/milestone-7-mvp-definition-implementation-planning/README.md) | Draft |
 | 8 | [Technology Stack & Development Architecture](./milestones/milestone-8-technology-stack-development-architecture/README.md) | Draft |
 | 9 | [Engineering Foundation & Development Setup](./milestones/milestone-9-engineering-foundation-development-setup/README.md) | Draft |
+| 10 | Foundation Build — *implementation milestone, no documentation directory; see [repository root README](../README.md) and [ADR README](./architecture/adr/README.md)* | Implemented |
+| 11 | [Curriculum Management & Content Engine](./milestones/milestone-11-curriculum-management-content-engine/README.md) | Draft |
 
-Actual implementation planning and development will begin only after
-Milestone 9 is reviewed and approved.
+Milestones 1–9 and the ADR foundation are documentation-only. Milestone 10
+is this repository's first implementation milestone — a working, tested
+vertical slice (see the repository root [README](../README.md)) — and,
+being application code rather than architecture documentation, has no
+`docs/milestones/` directory of its own. Milestone 11 returns to
+documentation-only work, extending Milestone 10's vertical slice toward a
+full curriculum management engine; per its own README, implementation
+against it begins only after it is reviewed and approved.
 
 ## Architecture Decision Records
 

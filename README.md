@@ -1,6 +1,6 @@
 # Minara-LMS
 
-**Status:** Draft — Milestone 10 (Foundation Build, in progress)
+**Status:** Milestone 10 (Foundation Build) implemented · Milestone 11 (Curriculum Management & Content Engine) documentation drafted, pending approval
 **Last Updated:** 2026-08-07
 
 ## What This Repository Is
@@ -34,13 +34,24 @@ for the substance.
 
 ## Current Phase
 
-**Milestone 10 — Foundation Build.** Milestones 1–9 and the Architecture
-Decision Record (ADR) foundation (documentation-only) are complete — see
-[`docs/`](./docs). Implementation has now begun: this repository is a
+**Milestone 10 — Foundation Build — implemented.** Milestones 1–9 and
+the Architecture Decision Record (ADR) foundation (documentation-only)
+are complete — see [`docs/`](./docs). This repository is a
 [Next.js](https://nextjs.org) (TypeScript, App Router) application
-implementing the first vertical slice of the platform, per
+implementing the first working vertical slice of the platform
+(Authentication → RBAC → Student Learning → Faculty Grading → Program
+Director Approval → Audit Trail), per
 [docs/architecture/adr/README.md](./docs/architecture/adr/README.md) and
 [docs/milestones/milestone-9-engineering-foundation-development-setup/](./docs/milestones/milestone-9-engineering-foundation-development-setup/).
+
+**Milestone 11 — Curriculum Management & Content Engine — documentation
+drafted, pending approval.** A documentation-only milestone specifying
+the full curriculum authoring, versioning, publishing, competency
+mapping, and assessment engine that extends Milestone 10's deliberately
+narrow schema — see
+[docs/milestones/milestone-11-curriculum-management-content-engine/](./docs/milestones/milestone-11-curriculum-management-content-engine/README.md).
+No application code changes were made for Milestone 11; implementation
+against it begins only after review and approval.
 
 ## Documentation
 
