@@ -1,7 +1,7 @@
 # Minara-LMS
 
-**Status:** Draft — Phase 1 (Architecture)
-**Last Updated:** 2026-08-06
+**Status:** Draft — Milestone 10 (Foundation Build, in progress)
+**Last Updated:** 2026-08-07
 
 ## What This Repository Is
 
@@ -11,8 +11,8 @@ for delivering and managing the educational experience across Minara's
 schools, programs, and student populations.
 
 This repository is dedicated to the **LMS platform** specifically: its
-architecture, product strategy, and (in later phases) its implementation. It
-does not contain institutional, curricular, or academic content.
+architecture, product strategy, and implementation. It does not contain
+institutional, curricular, or academic content.
 
 ## Relationship to Other Minara Repositories
 
@@ -34,12 +34,35 @@ for the substance.
 
 ## Current Phase
 
-**Phase 1 — Product Architecture.** This phase is documentation-only:
-product vision, platform strategy, and architectural principles. No
-production code, frameworks, vendors, or database schemas are being
-selected yet.
+**Milestone 10 — Foundation Build.** Milestones 1–9 and the Architecture
+Decision Record (ADR) foundation (documentation-only) are complete — see
+[`docs/`](./docs). Implementation has now begun: this repository is a
+[Next.js](https://nextjs.org) (TypeScript, App Router) application
+implementing the first vertical slice of the platform, per
+[docs/architecture/adr/README.md](./docs/architecture/adr/README.md) and
+[docs/milestones/milestone-9-engineering-foundation-development-setup/](./docs/milestones/milestone-9-engineering-foundation-development-setup/).
 
 ## Documentation
 
-All Phase 1 documentation lives under [`docs/`](./docs). Start with the
-[documentation index](./docs/README.md).
+All architecture and product documentation lives under [`docs/`](./docs).
+Start with the [documentation index](./docs/README.md), or the
+[ADR index](./docs/architecture/adr/README.md) for the governing
+architectural decisions.
+
+## Local Development
+
+```bash
+npm install
+npx prisma migrate dev   # applies the schema and creates the local SQLite database
+npm run db:seed          # seeds a demo Institution/School/Program and one user per role
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000). See
+`docs/milestones/milestone-9-engineering-foundation-development-setup/03-development-environment-strategy.md`
+for the full environment strategy this local setup implements.
+
+```bash
+npm test                 # runs the Vitest suite (auth, RBAC, and workflow tests)
+npm run build             # production build
+```

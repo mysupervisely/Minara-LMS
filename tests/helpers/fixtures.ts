@@ -1,0 +1,116 @@
+import { db } from "@/lib/db";
+import { createUser, assignRole } from "@/services/identity/users";
+import {
+  createInstitution,
+  createSchool,
+  createProgram,
+  createCohort,
+  createCourse,
+  createCourseOffering,
+  createLesson,
+} from "@/services/academic/institution";
+import { createAssessment } from "@/services/assessments/assessments";
+import { createEnrollment } from "@/services/enrollment/enrollment";
+
+/**
+ * Test fixtures — deliberately built through the real service functions
+ * (not raw `db.*.create` calls) wherever practical, so the test suite
+ * exercises the same code paths (including Audit Log emission) real
+ * usage does. Configuration-driven, per Milestone 10's "avoid Pharmacy
+ * Technology hard-coding" instruction: this fixture uses a generic
+ * "Test Program" name, not a real program name, to keep the test suite
+ * itself demonstrably decoupled from any specific program.
+ */
+
+let counter = 0;
+function unique(prefix: string) {
+  counter += 1;
+  return `${prefix}-${counter}`;
+}
+
+export async function buildTestUser(overrides?: { name?: string; email?: string; password?: string }) {
+  // actorId: null — a system-initiated creation, exactly like
+  // bootstrapping the first Administrator in a fresh deployment (see
+  // prisma/seed.ts and the module comment in
+  // src/services/identity/users.ts). Tests that need to verify audit
+  // attribution to a specific actor pass a real actorId explicitly via
+  // createUser directly instead of this fixture helper.
+  const email = overrides?.email ?? `${unique("user")}@example.test`;
+  return createUser({
+    name: overrides?.name ?? "Test User",
+    email,
+    password: overrides?.password ?? "password123",
+    actorId: null,
+  });
+}
+
+export async function buildAcademicStructure(actorId: string) {
+  const institution = await createInstitution("Test Institute of Health Sciences", actorId);
+  const school = await createSchool(
+    { institutionId: institution.id, name: "School of Test Sciences" },
+    actorId,
+  );
+  const program = await createProgram(
+    {
+      schoolId: school.id,
+      name: "Test Program",
+      slug: unique("test-program"),
+      description: "A generic test program.",
+    },
+    actorId,
+  );
+  const cohort = await createCohort({ programId: program.id, name: "Cohort A" }, actorId);
+  const course = await createCourse(
+    { programId: program.id, title: "Test Course", description: "A generic test course." },
+    actorId,
+  );
+  const courseOffering = await createCourseOffering(
+    { courseId: course.id, cohortId: cohort.id, term: "Test Term" },
+    actorId,
+  );
+  const lesson = await createLesson(
+    { courseId: course.id, title: "Lesson One", content: "Lesson content." },
+    actorId,
+  );
+  const assessment = await createAssessment(
+    { courseId: course.id, title: "Assessment One", instructions: "Do the thing.", maxScore: 100 },
+    actorId,
+  );
+
+  return { institution, school, program, cohort, course, courseOffering, lesson, assessment };
+}
+
+/** A full, ready-to-use scenario: one Program with one Course Offering, an enrolled Student, an assigned Faculty Instructor, and a Program Director overseeing the Program. */
+export async function buildFullScenario() {
+  const admin = await buildTestUser({ name: "Ada Admin", email: unique("admin") + "@example.test" });
+  await assignRole({ userId: admin.id, role: "ADMINISTRATOR", actorId: null });
+  const structure = await buildAcademicStructure(admin.id);
+
+  const student = await buildTestUser({ name: "Sam Student" });
+  await createEnrollment(
+    { studentId: student.id, programId: structure.program.id, cohortId: structure.cohort.id },
+    admin.id,
+  );
+
+  const faculty = await buildTestUser({ name: "Fay Faculty" });
+  await assignRole({
+    userId: faculty.id,
+    role: "FACULTY",
+    courseOfferingId: structure.courseOffering.id,
+    actorId: admin.id,
+  });
+
+  const programDirector = await buildTestUser({ name: "Pat Director" });
+  await assignRole({
+    userId: programDirector.id,
+    role: "PROGRAM_DIRECTOR",
+    programId: structure.program.id,
+    actorId: admin.id,
+  });
+
+  return { admin, student, faculty, programDirector, ...structure };
+}
+
+export async function getUserWithRoles(userId: string) {
+  return db.user.findUniqueOrThrow({ where: { id: userId }, include: { roleAssignments: true } });
+}

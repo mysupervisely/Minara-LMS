@@ -1,0 +1,354 @@
+// Minara-LMS — Prisma schema for the Milestone 10 vertical slice.
+//
+// This schema implements a deliberately narrow subset of the domain model
+// documented in docs/milestones/milestone-5-domain-model-data-architecture/,
+// scoped to what the vertical slice in
+// docs/milestones/milestone-9-engineering-foundation-development-setup/10-first-implementation-roadmap.md
+// and ADR-011 require. It is NOT full curriculum management (per Milestone
+// 10, Phase 5 instructions) — there is no Module layer between Course and
+// Lesson, no Question Bank, and no Competency/Learning Outcome modeling yet.
+//
+// Database engine: SQLite for local development and this vertical slice's
+// demonstrability, per the "database/domain decisions made" note in the
+// Milestone 10 deliverables summary. Milestone 8 (Doc 4, Database
+// Architecture Strategy) recommends PostgreSQL as the primary-store
+// category for production; Prisma's schema language is portable between
+// SQLite and PostgreSQL, so moving to Postgres later does not require
+// remodeling these entities — only changing the datasource provider and
+// re-running migrations.
+//
+// Role and status values are modeled as plain strings, not native enums:
+// SQLite has no enum support in Prisma, and a portable, string-based
+// approach avoids retying the schema to a Postgres-specific enum type
+// later. The canonical set of allowed values lives in
+// src/domain/roles.ts and is validated at the application boundary
+// (per Security Development Practices — "validate at every boundary"),
+// not left to the database alone.
+
+// Using the classic "prisma-client-js" generator (CommonJS/ESM-interop
+// friendly, output to node_modules/@prisma/client) rather than the newer
+// ESM-only "prisma-client" generator — the newer generator's
+// import.meta.url-based entry point behaves inconsistently across
+// Next.js, Vitest, and a plain tsx-run seed script in this environment.
+// This is the "boring, well-established choice" Technology Selection
+// Principles recommends over novelty for a foundational piece of
+// infrastructure (docs/milestones/milestone-8-technology-stack-development-architecture/01-technology-selection-principles.md).
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Platform Services bounded context — Identity
+// (docs/milestones/milestone-5-domain-model-data-architecture/06-platform-services-domain-model.md)
+// ─────────────────────────────────────────────────────────────────────────
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  sessions          Session[]
+  roleAssignments   RoleAssignment[]
+  enrollments       Enrollment[]
+  lessonCompletions LessonCompletion[]
+  submissions       Submission[]
+  gradesEntered     Grade[]            @relation("GradeEnteredBy")
+  gradesApproved    Grade[]            @relation("GradeApprovedBy")
+  auditLogs         AuditLog[]
+
+  @@map("users")
+}
+
+// The Authentication Identity / session concept from the Platform Services
+// Domain Model — server-side sessions per Security Architecture and
+// Authentication & Authorization Architecture (Milestone 6 Doc 4,
+// Milestone 8 Doc 5): revocable, not a stateless token.
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+// The Role Assignment = (Person, Role, Scope) model from the
+// Multi-School and Multi-Program Access Model (Milestone 2, Doc 4) and
+// Faculty & Administration Domain Model (Milestone 5, Doc 4).
+// Scope is expressed as optional references: an Administrator's
+// assignment has neither programId nor courseOfferingId (institution-wide,
+// per that document); a Program Director's assignment has a programId; a
+// Faculty Instructor's assignment has a courseOfferingId (their Teaching
+// Assignment); a Student's assignment scopes to Self and carries neither.
+model RoleAssignment {
+  id               String          @id @default(cuid())
+  userId           String
+  user             User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role             String
+  programId        String?
+  program          Program?        @relation(fields: [programId], references: [id])
+  courseOfferingId String?
+  courseOffering   CourseOffering? @relation(fields: [courseOfferingId], references: [id])
+  createdAt        DateTime        @default(now())
+
+  @@unique([userId, role, programId, courseOfferingId])
+  @@index([userId])
+  @@map("role_assignments")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Academic bounded context
+// (docs/milestones/milestone-5-domain-model-data-architecture/02-academic-domain-model.md)
+// ─────────────────────────────────────────────────────────────────────────
+
+model Institution {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+
+  schools School[]
+
+  @@map("institutions")
+}
+
+model School {
+  id            String      @id @default(cuid())
+  institutionId String
+  institution   Institution @relation(fields: [institutionId], references: [id])
+  name          String
+  createdAt     DateTime    @default(now())
+
+  programs Program[]
+
+  @@map("schools")
+}
+
+// Program-level Certificate/Externship *definitions* (per the ownership
+// note in the Academic Domain Model and Service Boundaries) are
+// represented as attributes here, not separate entities — the vertical
+// slice does not build Certificates or Externship Management (explicitly
+// out of scope for Milestone 10), so `requiresExternship` is recorded for
+// future phases but has no behavior wired to it yet.
+model Program {
+  id                 String   @id @default(cuid())
+  schoolId           String
+  school             School   @relation(fields: [schoolId], references: [id])
+  name               String
+  slug               String   @unique
+  description        String?
+  requiresExternship Boolean  @default(false)
+  createdAt          DateTime @default(now())
+
+  cohorts         Cohort[]
+  courses         Course[]
+  enrollments     Enrollment[]
+  roleAssignments RoleAssignment[]
+
+  @@map("programs")
+}
+
+model Cohort {
+  id        String   @id @default(cuid())
+  programId String
+  program   Program  @relation(fields: [programId], references: [id])
+  name      String
+  createdAt DateTime @default(now())
+
+  enrollments     Enrollment[]
+  courseOfferings CourseOffering[]
+
+  @@map("cohorts")
+}
+
+// Curriculum content ownership note (per the Academic Domain Model):
+// in a fully built platform, Course/Lesson content is authored in
+// Minara-Curriculum and only referenced here for delivery. This
+// vertical slice has no Minara-Curriculum integration yet, so Course
+// and Lesson content is entered directly through the Administrator
+// foundation screens — an explicit, documented simplification, not a
+// reversal of that ownership boundary.
+model Course {
+  id          String   @id @default(cuid())
+  programId   String
+  program     Program  @relation(fields: [programId], references: [id])
+  title       String
+  description String?
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  lessons         Lesson[]
+  assessments     Assessment[]
+  courseOfferings CourseOffering[]
+
+  @@map("courses")
+}
+
+// The delivery-time instance of a Course for a specific Cohort — see
+// Academic Domain Model's "Course Offering / Section" reconciliation
+// note. A Faculty Instructor's Teaching Assignment is a RoleAssignment
+// scoped to a CourseOffering, not a separate entity, per the Faculty &
+// Administration Domain Model's "Role Assignment as Teaching Assignment"
+// treatment simplified for this slice.
+model CourseOffering {
+  id        String   @id @default(cuid())
+  courseId  String
+  course    Course   @relation(fields: [courseId], references: [id])
+  cohortId  String
+  cohort    Cohort   @relation(fields: [cohortId], references: [id])
+  term      String
+  createdAt DateTime @default(now())
+
+  roleAssignments RoleAssignment[]
+
+  @@unique([courseId, cohortId])
+  @@map("course_offerings")
+}
+
+model Lesson {
+  id        String   @id @default(cuid())
+  courseId  String
+  course    Course   @relation(fields: [courseId], references: [id])
+  title     String
+  content   String
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+
+  completions LessonCompletion[]
+
+  @@map("lessons")
+}
+
+model Assessment {
+  id           String   @id @default(cuid())
+  courseId     String
+  course       Course   @relation(fields: [courseId], references: [id])
+  title        String
+  instructions String
+  maxScore     Int      @default(100)
+  createdAt    DateTime @default(now())
+
+  submissions Submission[]
+
+  @@map("assessments")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Student bounded context
+// (docs/milestones/milestone-5-domain-model-data-architecture/03-student-domain-model.md)
+// ─────────────────────────────────────────────────────────────────────────
+
+// Per the Student Domain Model: "one Student, many Enrollments." A
+// Student's own User row is the anchor identity; each Enrollment is a
+// participation in one Program + Cohort. status values: PENDING, ACTIVE,
+// WITHDRAWN, COMPLETED (Milestone 5 Doc 3's Enrollment lifecycle).
+model Enrollment {
+  id        String   @id @default(cuid())
+  studentId String
+  student   User     @relation(fields: [studentId], references: [id])
+  programId String
+  program   Program  @relation(fields: [programId], references: [id])
+  cohortId  String
+  cohort    Cohort   @relation(fields: [cohortId], references: [id])
+  status    String   @default("ACTIVE")
+  createdAt DateTime @default(now())
+
+  submissions Submission[]
+
+  @@unique([studentId, programId])
+  @@index([programId])
+  @@index([cohortId])
+  @@map("enrollments")
+}
+
+// The Course Progress concept from the Student Domain Model, narrowed
+// for this slice to per-Lesson completion tracking (no Module-level
+// rollup, consistent with the Course→Lesson simplification above).
+model LessonCompletion {
+  id          String   @id @default(cuid())
+  studentId   String
+  student     User     @relation(fields: [studentId], references: [id])
+  lessonId    String
+  lesson      Lesson   @relation(fields: [lessonId], references: [id])
+  completedAt DateTime @default(now())
+
+  @@unique([studentId, lessonId])
+  @@map("lesson_completions")
+}
+
+model Submission {
+  id           String     @id @default(cuid())
+  assessmentId String
+  assessment   Assessment @relation(fields: [assessmentId], references: [id])
+  studentId    String
+  student      User       @relation(fields: [studentId], references: [id])
+  enrollmentId String
+  enrollment   Enrollment @relation(fields: [enrollmentId], references: [id])
+  content      String
+  submittedAt  DateTime   @default(now())
+
+  grade Grade?
+
+  @@unique([assessmentId, studentId])
+  @@map("submissions")
+}
+
+// Grade lifecycle: DRAFT (Faculty entered, not yet submitted) →
+// SUBMITTED (Faculty submitted for approval) → APPROVED (Program
+// Director approved — official) — the approval-gate pattern from
+// Faculty Workflows §Approval Points and the Business Rules Catalog's
+// Faculty & Staffing Rules, which ADR-011's vertical slice exists to
+// prove end-to-end.
+model Grade {
+  id           String     @id @default(cuid())
+  submissionId String     @unique
+  submission   Submission @relation(fields: [submissionId], references: [id])
+  score        Int
+  feedback     String?
+  status       String     @default("DRAFT")
+  enteredById  String
+  enteredBy    User       @relation("GradeEnteredBy", fields: [enteredById], references: [id])
+  approvedById String?
+  approvedBy   User?      @relation("GradeApprovedBy", fields: [approvedById], references: [id])
+  createdAt    DateTime   @default(now())
+  submittedAt  DateTime?
+  approvedAt   DateTime?
+
+  @@map("grades")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Platform Services bounded context — Audit
+// (docs/milestones/milestone-2-user-roles-permission-architecture/05-audit-accountability-framework.md)
+// ─────────────────────────────────────────────────────────────────────────
+
+// Append-only by convention: no application code path updates or
+// deletes an AuditLog row (per ADR-005) — enforced at the application
+// layer in src/services/audit/, since SQLite has no row-level
+// permission system to enforce it at the database layer the way
+// Milestone 8's Database Architecture Strategy recommends for
+// production Postgres.
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  actor      User?    @relation(fields: [actorId], references: [id])
+  action     String
+  entityType String
+  entityId   String?
+  metadata   String?
+  createdAt  DateTime @default(now())
+
+  @@index([actorId])
+  @@index([entityType, entityId])
+  @@map("audit_logs")
+}

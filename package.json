@@ -1,0 +1,38 @@
+{
+  "name": "minara-lms",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "postinstall": "prisma generate",
+    "db:seed": "tsx --conditions=react-server prisma/seed.ts",
+    "pretest": "DATABASE_URL=file:./test.db prisma migrate deploy",
+    "test": "DATABASE_URL=file:./test.db vitest run",
+    "test:watch": "DATABASE_URL=file:./test.db vitest"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.19.3",
+    "bcryptjs": "^3.0.3",
+    "next": "16.3.0",
+    "prisma": "^6.19.3",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "server-only": "^0.0.1",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "dotenv": "^17.4.2",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.0",
+    "tsx": "^4.23.10",
+    "typescript": "^5",
+    "vitest": "^4.1.10"
+  }
+}
