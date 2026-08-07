@@ -1,6 +1,6 @@
 # Minara-LMS
 
-**Status:** Milestone 10 (Foundation Build) implemented · Milestone 11 (Curriculum Management & Content Engine) documentation drafted, pending approval
+**Status:** Milestone 10 (Foundation Build) implemented · Milestones 11 (Curriculum Management & Content Engine) and 12 (Curriculum Delivery Vertical Slice) documentation drafted, pending approval
 **Last Updated:** 2026-08-07
 
 ## What This Repository Is
@@ -52,6 +52,18 @@ narrow schema — see
 [docs/milestones/milestone-11-curriculum-management-content-engine/](./docs/milestones/milestone-11-curriculum-management-content-engine/README.md).
 No application code changes were made for Milestone 11; implementation
 against it begins only after review and approval.
+
+**Milestone 12 — Curriculum Delivery Vertical Slice — documentation
+drafted, pending approval.** Per
+[ADR-011](./docs/architecture/adr/ADR-011-vertical-slice-development-strategy.md),
+plans the next narrow, end-to-end slice through Milestone 11's design —
+Faculty/Admin content authoring → approval → publish → Student
+consumption → completion → assessment → grade → competency progress →
+audit trail — proving Milestone 11's architecture against Milestone 10's
+implemented foundation before any broader engine build begins. See
+[docs/milestones/milestone-12-curriculum-delivery-vertical-slice/](./docs/milestones/milestone-12-curriculum-delivery-vertical-slice/README.md).
+No application code changes were made for Milestone 12 either;
+implementation begins only after review and approval.
 
 ## Documentation
 
