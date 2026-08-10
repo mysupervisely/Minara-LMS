@@ -1,7 +1,7 @@
 # Minara-LMS
 
-**Status:** Milestones 10 (Foundation Build), 13 (Curriculum Delivery Vertical Slice), and 14 (Content Versioning Vertical Slice) implemented · Milestone 11 (Curriculum Management & Content Engine) documentation drafted, pending approval · Milestone 15 (Planning & Architecture Checkpoint) documentation drafted, pending approval
-**Last Updated:** 2026-08-07
+**Status:** Milestones 10 (Foundation Build), 13 (Curriculum Delivery Vertical Slice), 14 (Content Versioning Vertical Slice), and 15 (Externship Eligibility & Placement Vertical Slice) implemented · Milestone 11 (Curriculum Management & Content Engine) documentation drafted, pending approval
+**Last Updated:** 2026-08-10
 
 ## What This Repository Is
 
@@ -95,19 +95,26 @@ versioning") that this milestone now closes, narrowly, for Lessons and
 Assessments only (Programs/Courses/Modules, Question Banks, and an
 Archive workflow remain out of scope).
 
-**Milestone 15 — Planning & Architecture Checkpoint — documentation
-drafted, pending approval.** Before extending the platform further, this
-milestone inventories what's actually implemented versus documentation
-only across every named platform area, evaluates (and defers)
-Course-level versioning, ranks the next five implementation candidates
-against what a real operating Pharmacy Technology school needs, and
-recommends one narrow next implementation milestone — an Externship
-Eligibility & Placement Vertical Slice, activating the already-declared
-`CLINICAL_COORDINATOR` role rather than introducing a new one — with a
-**CONDITIONAL GO** readiness assessment. See
-[docs/milestones/milestone-15-externship-eligibility-placement-vertical-slice/](./docs/milestones/milestone-15-externship-eligibility-placement-vertical-slice/README.md).
-No application code changes were made for Milestone 15; implementation
-against its recommendation begins only after review and approval.
+**Milestone 15 — Externship Eligibility & Placement Vertical Slice —
+implemented.** Before extending the platform further, this milestone
+first performed an architecture/product review — inventorying what's
+actually implemented versus documentation only across every named
+platform area, evaluating (and deferring) Course-level versioning,
+ranking the next five implementation candidates against what a real
+operating Pharmacy Technology school needs — then implemented the one
+narrow slice that review recommended: eligibility determination → Clinical
+Site management → Placement request/approval/activation → Midpoint/Final
+Evaluation → joint Coordinator + Program Director Completion
+Verification. Activates the already-declared `CLINICAL_COORDINATOR` role
+(per `src/domain/roles.ts`, unchanged in shape since Milestone 10) rather
+than introducing a new one; reuses the same approval-gate and audit
+patterns proven in Milestones 10, 13, and 14. Deliberately excludes
+Employer/Preceptor self-service login, itemized Hours Log, and Site
+Agreement tracking — see
+[docs/milestones/milestone-15-externship-eligibility-placement-vertical-slice/](./docs/milestones/milestone-15-externship-eligibility-placement-vertical-slice/README.md)
+for the full planning package and the
+[Implementation Completion Record](./docs/milestones/milestone-15-externship-eligibility-placement-vertical-slice/07-implementation-completion-record.md)
+for exactly what was built.
 
 ## Documentation
 
@@ -130,6 +137,6 @@ Open [http://localhost:3000](http://localhost:3000). See
 for the full environment strategy this local setup implements.
 
 ```bash
-npm test                 # runs the Vitest suite (auth, RBAC, curriculum delivery, and workflow tests)
+npm test                 # runs the Vitest suite (auth, RBAC, curriculum delivery, versioning, and externship workflow tests)
 npm run build             # production build
 ```

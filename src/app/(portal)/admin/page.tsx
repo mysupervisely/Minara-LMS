@@ -8,13 +8,15 @@ export const metadata: Metadata = { title: "Administrator Overview" };
 export default async function AdminOverviewPage() {
   const user = await requireSessionUserWithRole("ADMINISTRATOR");
 
-  const [institutionCount, programCount, userCount, enrollmentCount, pendingGrades] =
+  const [institutionCount, programCount, userCount, enrollmentCount, pendingGrades, clinicalSiteCount, placementCount] =
     await Promise.all([
       db.institution.count(),
       db.program.count(),
       db.user.count(),
       db.enrollment.count(),
       db.grade.count({ where: { status: "SUBMITTED" } }),
+      db.clinicalSite.count(),
+      db.placement.count(),
     ]);
 
   return (
@@ -26,6 +28,14 @@ export default async function AdminOverviewPage() {
         <StatCard label="Users" value={userCount} href="/admin/users" />
         <StatCard label="Enrollments" value={enrollmentCount} href="/admin/enrollments" />
         <StatCard label="Grades Awaiting Approval" value={pendingGrades} href="/program-director" />
+        {/* Milestone 15 — Externship Eligibility & Placement Vertical Slice.
+            Reuses the Coordinator Portal itself for Administrator oversight
+            (per this milestone's "do not build a separate administrative
+            workflow if existing patterns can be extended") — an
+            Administrator reaching /coordinator/* passes every scope check
+            there via hasRoleForProgram's own Administrator bypass. */}
+        <StatCard label="Clinical Sites" value={clinicalSiteCount} href="/coordinator/sites" />
+        <StatCard label="Externship Placements" value={placementCount} href="/coordinator/placements" />
       </div>
     </div>
   );

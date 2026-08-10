@@ -30,6 +30,17 @@
  * seeded database proves "a published educational record can evolve
  * without rewriting history" out of the box, not only under test.
  *
+ * Milestone 15 update: the Program below already carried
+ * `requiresExternship: true` since it was first created (recorded for
+ * future phases per Milestone 10's schema comment) — this milestone is
+ * that future phase. The seed now also activates a Clinical Coordinator,
+ * records a Clinical Site, and walks one Placement all the way to a
+ * Program-Director-verified Completion, through the same
+ * src/services/externship/externship.ts functions the real Coordinator/
+ * Program Director portal screens call — so a freshly seeded database
+ * demonstrates the full Externship Eligibility & Placement lifecycle out
+ * of the box too.
+ *
  * Run with: npm run db:seed
  * Safe to re-run against an empty database; not idempotent against a
  * database that already has data (it will create duplicates or fail on
@@ -58,9 +69,49 @@ import {
   publishContent,
 } from "../src/services/academic/content-workflow";
 import { enterGrade, submitGradeForApproval, approveGrade } from "../src/services/gradebook/gradebook";
+import {
+  createClinicalSite,
+  updateClinicalSiteStatus,
+  determineEligibility,
+  requestPlacement,
+  approvePlacement,
+  activatePlacement,
+  recordEvaluation,
+  attestHoursComplete,
+  submitCompletionForVerification,
+  verifyCompletion,
+} from "../src/services/externship/externship";
 import { db } from "../src/lib/db";
+import type { SessionUser } from "../src/services/identity/session";
 
 const DEMO_PASSWORD = "minara-demo-2026";
+
+/**
+ * externship.ts's functions take a full SessionUser (id + roleAssignments)
+ * rather than a plain actorId string, per that module's own
+ * service-layer-enforced-authorization design — this reconstructs that
+ * shape from the database directly, the same projection
+ * src/services/identity/session.ts's getSessionUser builds from a real
+ * cookie-backed session, since this script has no HTTP request/cookie to
+ * read one from.
+ */
+async function actorFor(userId: string): Promise<SessionUser> {
+  const user = await db.user.findUniqueOrThrow({
+    where: { id: userId },
+    include: { roleAssignments: true },
+  });
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    roleAssignments: user.roleAssignments.map((ra) => ({
+      id: ra.id,
+      role: ra.role as SessionUser["roleAssignments"][number]["role"],
+      programId: ra.programId,
+      courseOfferingId: ra.courseOfferingId,
+    })),
+  };
+}
 
 async function main() {
   console.log("Seeding Minara-LMS local development database...\n");
@@ -246,16 +297,108 @@ async function main() {
   await approveContent("LESSON", lesson1v2.id, programDirector.id);
   await publishContent("LESSON", lesson1v2.id, admin.id);
 
+  // 7. Milestone 15's Externship Eligibility & Placement Vertical Slice —
+  // activates the already-declared CLINICAL_COORDINATOR role (see
+  // src/domain/roles.ts) and walks one Placement through the full
+  // narrow slice this milestone built: eligibility determination → site
+  // → placement request → approval → activation → midpoint evaluation →
+  // final evaluation → hours-complete attestation → Coordinator submits
+  // for Completion Verification → Program Director verifies it. No
+  // specific hour count, GPA, or evaluation score threshold appears
+  // anywhere below — every judgment call here is exactly that, a
+  // judgment call recorded by the Coordinator/Program Director, never a
+  // platform-enforced number (see this milestone's Externship Deep
+  // Dive).
+  const coordinator = await createUser({
+    name: "Cody Coordinator",
+    email: "coordinator@minara.edu",
+    password: DEMO_PASSWORD,
+    actorId: admin.id,
+  });
+  await assignRole({
+    userId: coordinator.id,
+    role: "CLINICAL_COORDINATOR",
+    programId: program.id,
+    actorId: admin.id,
+  });
+
+  const coordinatorActor = await actorFor(coordinator.id);
+  const programDirectorActor = await actorFor(programDirector.id);
+
+  const site = await createClinicalSite(
+    {
+      programId: program.id,
+      name: "Riverbend Community Pharmacy",
+      employerName: "Riverbend Health Partners",
+      contactName: "Jordan Preceptor",
+      contactInfo: "jordan@riverbendhealth.example",
+      capacity: 2,
+    },
+    coordinatorActor,
+  );
+  await updateClinicalSiteStatus(site.id, "ACTIVE", coordinatorActor);
+
+  await determineEligibility(
+    {
+      studentId: student.id,
+      programId: program.id,
+      status: "ELIGIBLE",
+      notes: "Reviewed academic record: Pharmacology Fundamentals grade approved.",
+    },
+    coordinatorActor,
+  );
+
+  const placement = await requestPlacement(
+    {
+      studentId: student.id,
+      programId: program.id,
+      clinicalSiteId: site.id,
+      preceptorName: "Jordan Preceptor",
+      preceptorContact: "jordan@riverbendhealth.example",
+    },
+    coordinatorActor,
+  );
+  await approvePlacement(placement.id, coordinatorActor);
+  await activatePlacement(placement.id, coordinatorActor);
+
+  await recordEvaluation(
+    {
+      placementId: placement.id,
+      type: "MIDPOINT",
+      content: "Demonstrates strong attention to detail during prescription intake.",
+      outcome: "SATISFACTORY",
+    },
+    coordinatorActor,
+  );
+  await recordEvaluation(
+    {
+      placementId: placement.id,
+      type: "FINAL",
+      content: "Consistently accurate dosage calculations; ready for independent practice.",
+      outcome: "SATISFACTORY",
+    },
+    coordinatorActor,
+  );
+  await attestHoursComplete(placement.id, coordinatorActor);
+  await submitCompletionForVerification(placement.id, coordinatorActor);
+  await verifyCompletion(placement.id, programDirectorActor);
+
   console.log("Seed complete. Demo accounts (all use the same password):\n");
-  console.log(`  Administrator     admin@minara.edu`);
-  console.log(`  Faculty           faculty@minara.edu`);
-  console.log(`  Program Director  director@minara.edu`);
-  console.log(`  Student           student@minara.edu`);
-  console.log(`  Password (all)    ${DEMO_PASSWORD}\n`);
+  console.log(`  Administrator       admin@minara.edu`);
+  console.log(`  Faculty             faculty@minara.edu`);
+  console.log(`  Program Director    director@minara.edu`);
+  console.log(`  Clinical Coordinator coordinator@minara.edu`);
+  console.log(`  Student             student@minara.edu`);
+  console.log(`  Password (all)      ${DEMO_PASSWORD}\n`);
   console.log(
     "Lesson 1 now has two Versions — v1 (Published, completed by the Student before v2 existed) " +
       "and v2 (Published, now the live version delivered to Students; the Student has not yet " +
-      "completed it) — demonstrating this milestone's versioning guarantee out of the box.",
+      "completed it) — demonstrating Milestone 14's versioning guarantee out of the box.",
+  );
+  console.log(
+    "The Student's externship Placement at Riverbend Community Pharmacy has been carried through " +
+      "eligibility, activation, both evaluations, and a Program-Director-verified Completion — " +
+      "demonstrating Milestone 15's full narrow slice out of the box.",
   );
   console.log("Assessment id for manual testing:", assessment.id);
 }

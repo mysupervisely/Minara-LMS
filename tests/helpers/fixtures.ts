@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import type { SessionUser } from "@/services/identity/session";
 import { createUser, assignRole } from "@/services/identity/users";
 import {
   createInstitution,
@@ -161,4 +162,54 @@ export async function buildFullScenario() {
 
 export async function getUserWithRoles(userId: string) {
   return db.user.findUniqueOrThrow({ where: { id: userId }, include: { roleAssignments: true } });
+}
+
+/**
+ * Milestone 15: src/services/externship/externship.ts's functions take a
+ * full SessionUser (id + roleAssignments), not a plain actorId string —
+ * per that module's service-layer-enforced-authorization design — so
+ * tests calling it directly need this shape without going through a real
+ * cookie-backed login/getSessionUser() round trip for every actor. Same
+ * projection prisma/seed.ts's own `actorFor` builds, kept as a separate
+ * small copy here rather than a shared module, consistent with this
+ * being a test-only helper file.
+ */
+export async function actorFor(userId: string): Promise<SessionUser> {
+  const user = await getUserWithRoles(userId);
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    roleAssignments: user.roleAssignments.map((ra) => ({
+      id: ra.id,
+      role: ra.role as SessionUser["roleAssignments"][number]["role"],
+      programId: ra.programId,
+      courseOfferingId: ra.courseOfferingId,
+    })),
+  };
+}
+
+/**
+ * A full scenario extended for Milestone 15 (Externship Eligibility &
+ * Placement Vertical Slice): the Program is flipped to
+ * `requiresExternship: true` after creation (rather than threading a new
+ * parameter through buildAcademicStructure, which every other existing
+ * test still calls expecting today's default), and a Clinical Coordinator
+ * — CLINICAL_COORDINATOR, Program-scoped, per src/domain/roles.ts — is
+ * added alongside the existing Student/Faculty/Program Director/
+ * Administrator cast.
+ */
+export async function buildExternshipScenario() {
+  const scenario = await buildFullScenario();
+  await db.program.update({ where: { id: scenario.program.id }, data: { requiresExternship: true } });
+
+  const coordinator = await buildTestUser({ name: "Cody Coordinator" });
+  await assignRole({
+    userId: coordinator.id,
+    role: "CLINICAL_COORDINATOR",
+    programId: scenario.program.id,
+    actorId: scenario.admin.id,
+  });
+
+  return { ...scenario, coordinator };
 }

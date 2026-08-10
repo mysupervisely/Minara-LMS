@@ -31,6 +31,7 @@ export default async function PortalLayout({ children }: { children: React.React
               { href: "/student", label: "Dashboard" },
               { href: "/student/grades", label: "My Grades" },
               { href: "/student/competencies", label: "My Competencies" },
+              { href: "/student/externship", label: "My Externship" },
             ]}
           />
         )}
@@ -46,6 +47,20 @@ export default async function PortalLayout({ children }: { children: React.React
             links={[
               { href: "/program-director", label: "Grade Approvals" },
               { href: "/program-director/content", label: "Curriculum Review" },
+              { href: "/program-director/externship", label: "Completion Verification" },
+            ]}
+          />
+        )}
+        {roles.includes("CLINICAL_COORDINATOR") && (
+          <PortalNavSection
+            heading="Clinical Coordinator"
+            links={[
+              { href: "/coordinator", label: "Dashboard" },
+              { href: "/coordinator/sites", label: "Sites" },
+              { href: "/coordinator/eligibility", label: "Eligibility Queue" },
+              { href: "/coordinator/placements", label: "Placements" },
+              { href: "/coordinator/evaluations", label: "Evaluations" },
+              { href: "/coordinator/completion", label: "Completion Verification" },
             ]}
           />
         )}

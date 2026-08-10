@@ -68,7 +68,28 @@ export type AuditAction =
   | "VERSION_SUBMITTED"
   | "VERSION_APPROVED"
   | "VERSION_RETURNED"
-  | "VERSION_PUBLISHED";
+  | "VERSION_PUBLISHED"
+  // Milestone 15 — Externship Eligibility & Placement Vertical Slice.
+  // Extends this same union rather than a second audit mechanism, per
+  // this milestone's explicit instruction. ELIGIBILITY_DETERMINED
+  // covers a Coordinator's eligibility determination (there is no
+  // automated eligibility computation to log — see
+  // src/services/externship/externship.ts). PLACEMENT_STATUS_CHANGED
+  // covers every step of a Placement's own lifecycle
+  // (REQUESTED→APPROVED→ACTIVE→COMPLETED); EXTERNSHIP_COMPLETION_* is
+  // the separate Coordinator+Program Director joint approval gate on
+  // that same Placement (see the Placement model's comment in
+  // prisma/schema.prisma for why these are deliberately two distinct
+  // state machines, not one).
+  | "ELIGIBILITY_DETERMINED"
+  | "CLINICAL_SITE_CREATED"
+  | "CLINICAL_SITE_STATUS_CHANGED"
+  | "PLACEMENT_CREATED"
+  | "PLACEMENT_STATUS_CHANGED"
+  | "EVALUATION_CREATED"
+  | "EXTERNSHIP_COMPLETION_SUBMITTED"
+  | "EXTERNSHIP_COMPLETION_VERIFIED"
+  | "EXTERNSHIP_COMPLETION_RETURNED";
 
 export interface RecordAuditEventInput {
   /** The acting User's id, or null for a system-initiated event (e.g. a failed login for an unknown email). */

@@ -49,7 +49,7 @@ Minara-Master-Plan):
 | 12 | [Curriculum Delivery Vertical Slice — Planning](./milestones/milestone-12-curriculum-delivery-vertical-slice/README.md) | Draft |
 | 13 | Curriculum Delivery Vertical Slice — Implementation — *implementation milestone, no documentation directory; see [repository root README](../README.md) and [Milestone 12's plan](./milestones/milestone-12-curriculum-delivery-vertical-slice/README.md)* | Implemented |
 | 14 | Content Versioning Vertical Slice — Implementation — *implementation milestone, no documentation directory; see [repository root README](../README.md)* | Implemented |
-| 15 | [Planning & Architecture Checkpoint](./milestones/milestone-15-externship-eligibility-placement-vertical-slice/README.md) | Draft |
+| 15 | [Planning & Architecture Checkpoint, then Externship Eligibility & Placement Vertical Slice — Implementation](./milestones/milestone-15-externship-eligibility-placement-vertical-slice/README.md) | Implemented |
 
 Milestones 1–9 and the ADR foundation are documentation-only. Milestone 10
 is this repository's first implementation milestone — a working, tested
@@ -66,7 +66,14 @@ plan (again application code, no `docs/milestones/` directory of its
 own). Milestone 14 is a further narrow implementation slice on top of
 Milestone 13 — immutable content versioning for Lessons and Assessments,
 per ADR-011's incremental strategy — again application code with no
-`docs/milestones/` directory of its own. Implementation against the
+`docs/milestones/` directory of its own. Milestone 15 is different in
+shape from 11–14: it opens with its own documentation-only architecture
+checkpoint (unlike 11/12, this one *does* keep a `docs/milestones/`
+directory, since the checkpoint's inventory/ranking/deep-dive is worth
+keeping as a permanent record), then implements the narrow slice that
+checkpoint recommended — Externship Eligibility & Placement — under the
+same milestone number rather than a new one, recorded in that directory's
+own Implementation Completion Record. Implementation against the
 remainder of Milestone 11's full engine begins only after it, too, is
 reviewed and approved.
 

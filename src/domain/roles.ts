@@ -6,10 +6,22 @@
  * All seven roles are declared here — per Milestone 10, Phase 4:
  * "Create the foundation so future roles can be added: Admissions Staff,
  * Clinical Coordinator, Employer Partner." Only the first four
- * (STUDENT, FACULTY, PROGRAM_DIRECTOR, ADMINISTRATOR) have working UI and
- * service logic in this vertical slice — the remaining three are modeled
- * so a later milestone can wire them up without touching this file's
+ * (STUDENT, FACULTY, PROGRAM_DIRECTOR, ADMINISTRATOR) had working UI and
+ * service logic through Milestone 14 — the remaining three were modeled
+ * so a later milestone could wire them up without touching this file's
  * shape, only adding to it.
+ *
+ * Milestone 15 (Externship Eligibility & Placement Vertical Slice) is
+ * that later milestone for CLINICAL_COORDINATOR: it now has a working
+ * Coordinator Portal (src/app/(portal)/coordinator) and service logic
+ * (src/services/externship/externship.ts), and is added to
+ * IMPLEMENTED_ROLES below. This is *activating* an already-declared
+ * Role, not introducing a new one — its shape (ROLES, ROLE_LABELS,
+ * ROLE_SCOPE) was fixed since Milestone 10 and required zero changes
+ * here. ADMISSIONS_STAFF and EMPLOYER_PARTNER remain declared but not
+ * implemented, per this milestone's explicit "no new RBAC roles"
+ * constraint and its deliberate exclusion of Employer self-service
+ * access (see the Externship Deep Dive).
  *
  * Role values are plain strings, not a database enum, per the schema
  * comment in prisma/schema.prisma — this file (not the database) is the
@@ -32,12 +44,13 @@ export const ROLES = [
 
 export type Role = (typeof ROLES)[number];
 
-/** Roles with working implementation in this vertical slice (Milestone 10). */
+/** Roles with working implementation — STUDENT/FACULTY/PROGRAM_DIRECTOR/ADMINISTRATOR since Milestone 10, CLINICAL_COORDINATOR since Milestone 15. */
 export const IMPLEMENTED_ROLES: Role[] = [
   "STUDENT",
   "FACULTY",
   "PROGRAM_DIRECTOR",
   "ADMINISTRATOR",
+  "CLINICAL_COORDINATOR",
 ];
 
 export const RoleSchema = z.enum(ROLES);
@@ -79,6 +92,6 @@ export const ROLE_HOME_ROUTE: Record<Role, string> = {
   PROGRAM_DIRECTOR: "/program-director",
   ADMINISTRATOR: "/admin",
   ADMISSIONS_STAFF: "/admin",
-  CLINICAL_COORDINATOR: "/admin",
+  CLINICAL_COORDINATOR: "/coordinator",
   EMPLOYER_PARTNER: "/admin",
 };

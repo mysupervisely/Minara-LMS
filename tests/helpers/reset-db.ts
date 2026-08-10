@@ -10,6 +10,16 @@ import { db } from "@/lib/db";
  */
 export async function resetDatabase() {
   await db.auditLog.deleteMany();
+
+  // Milestone 15 — Externship Eligibility & Placement Vertical Slice:
+  // Evaluation -> Placement -> ClinicalSite -> ExternshipEligibility, all
+  // referencing User/Program, none referencing anything deleted below —
+  // safe to clear anywhere before program.deleteMany()/user.deleteMany().
+  await db.evaluation.deleteMany();
+  await db.placement.deleteMany();
+  await db.clinicalSite.deleteMany();
+  await db.externshipEligibility.deleteMany();
+
   await db.grade.deleteMany();
   await db.submission.deleteMany();
   await db.lessonCompletion.deleteMany();

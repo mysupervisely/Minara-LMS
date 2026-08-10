@@ -11,6 +11,13 @@ import {
   returnContentToDraft,
   ContentStateError,
 } from "@/services/academic/content-workflow";
+import {
+  getPlacementById,
+  verifyCompletion,
+  returnCompletion,
+  ExternshipStateError,
+  ExternshipAuthorizationError,
+} from "@/services/externship/externship";
 
 async function assertProgramDirectorOwnsGrade(gradeId: string, userId: string) {
   const grade = await getGradeForApproval(gradeId);
@@ -136,5 +143,82 @@ export async function returnContentToDraftAction(
 
   revalidatePath("/program-director/content");
   revalidatePath(`/program-director/content/${contentType.toLowerCase()}s/${versionId}`);
+  return { success: true };
+}
+
+// ── Externship Completion Verification — Milestone 15 ───────────────────
+//
+// The Program Director's half of the joint Coordinator + Program
+// Director approval gate on a Placement — see the Placement model's
+// comment in prisma/schema.prisma. `getPlacementById`/`verifyCompletion`/
+// `returnCompletion` in src/services/externship/externship.ts already
+// enforce Program scope themselves (this milestone's "never rely
+// exclusively on page-level protection" instruction) — the
+// `hasRoleForProgram` check below is the same defense-in-depth belt this
+// file already applies to Grade and Content review above, not a
+// replacement for the service-layer check.
+
+async function assertProgramDirectorOwnsPlacement(placementId: string, userId: string) {
+  const user = await requireSessionUserWithRole("PROGRAM_DIRECTOR");
+  if (user.id !== userId) throw new Error("Session mismatch.");
+
+  const placement = await getPlacementById(placementId, user);
+  if (!placement) throw new Error("Placement not found.");
+
+  const isAdministrator = user.roleAssignments.some((ra) => ra.role === "ADMINISTRATOR");
+  if (!isAdministrator && !hasRoleForProgram(user, "PROGRAM_DIRECTOR", placement.programId)) {
+    throw new Error("You do not oversee the Program this Placement belongs to.");
+  }
+
+  return { placement, user };
+}
+
+function messageForExternshipError(error: unknown): string {
+  if (error instanceof ExternshipStateError || error instanceof ExternshipAuthorizationError) {
+    return error.message;
+  }
+  throw error;
+}
+
+/** Bound to a plain `<form action={...}>` — see approveGradeAction's comment above for why this throws rather than returning a state. */
+export async function verifyCompletionAction(placementId: string, _formData: FormData): Promise<void> {
+  const user = await requireSessionUserWithRole("PROGRAM_DIRECTOR");
+  await assertProgramDirectorOwnsPlacement(placementId, user.id);
+
+  try {
+    await verifyCompletion(placementId, user);
+  } catch (error) {
+    throw new Error(messageForExternshipError(error));
+  }
+
+  revalidatePath("/program-director/externship");
+  revalidatePath(`/program-director/externship/${placementId}`);
+}
+
+export interface ReturnCompletionState {
+  error?: string;
+  success?: boolean;
+}
+
+/** A required "reason" field means this needs `useActionState`, like returnContentToDraftAction above. */
+export async function returnCompletionAction(
+  placementId: string,
+  _prevState: ReturnCompletionState,
+  formData: FormData,
+): Promise<ReturnCompletionState> {
+  const user = await requireSessionUserWithRole("PROGRAM_DIRECTOR");
+  await assertProgramDirectorOwnsPlacement(placementId, user.id);
+
+  const reason = String(formData.get("reason") ?? "").trim();
+  if (!reason) return { error: "A reason is required when returning a completion for further work." };
+
+  try {
+    await returnCompletion(placementId, reason, user);
+  } catch (error) {
+    return { error: messageForExternshipError(error) };
+  }
+
+  revalidatePath("/program-director/externship");
+  revalidatePath(`/program-director/externship/${placementId}`);
   return { success: true };
 }

@@ -1,19 +1,25 @@
 // Minara-LMS — Prisma schema for the Milestone 10 vertical slice, extended
 // by Milestone 13 (content approval/publishing lifecycle + a minimal
-// Competency) and Milestone 14 (immutable Lesson/Assessment versioning).
+// Competency), Milestone 14 (immutable Lesson/Assessment versioning), and
+// Milestone 15 (a narrow Externship Eligibility & Placement slice —
+// ExternshipEligibility, ClinicalSite, Placement, Evaluation).
 //
 // This schema implements a deliberately narrow subset of the domain model
 // documented in docs/milestones/milestone-5-domain-model-data-architecture/,
 // scoped to what the vertical slice in
 // docs/milestones/milestone-9-engineering-foundation-development-setup/10-first-implementation-roadmap.md
-// and ADR-011 require, applied twice more (Milestones 13 and 14) per that
-// same ADR's discipline of proving one narrow slice at a time rather than
-// building the full docs/milestones/milestone-11-curriculum-management-content-engine/
-// engine at once. It is still NOT full curriculum management — there is no
-// Module layer between Course and Lesson, no Question Bank, no Program/
-// Course-level versioning (only Lesson/Assessment), and no full
-// Competency/Learning Outcome hierarchy (only a minimal, Program-scoped
-// Competency, per Milestone 13's Domain Impact Review).
+// and ADR-011 require, applied three times more (Milestones 13, 14, and 15)
+// per that same ADR's discipline of proving one narrow slice at a time
+// rather than building the full
+// docs/milestones/milestone-11-curriculum-management-content-engine/ engine
+// (or the full Clinical & Externship Domain Model) at once. It is still NOT
+// full curriculum management — there is no Module layer between Course and
+// Lesson, no Question Bank, no Program/Course-level versioning (only
+// Lesson/Assessment), and no full Competency/Learning Outcome hierarchy
+// (only a minimal, Program-scoped Competency, per Milestone 13's Domain
+// Impact Review). It is also NOT the full Externship Management system —
+// no Employer/Preceptor login, no Site Agreements, no itemized Hours Log —
+// per Milestone 15's own Externship Deep Dive.
 //
 // Database engine: SQLite for local development and this vertical slice's
 // demonstrability, per the "database/domain decisions made" note in the
@@ -70,6 +76,22 @@ model User {
   gradesEntered     Grade[]            @relation("GradeEnteredBy")
   gradesApproved    Grade[]            @relation("GradeApprovedBy")
   auditLogs         AuditLog[]
+
+  // Milestone 15 (Externship Eligibility & Placement Vertical Slice) —
+  // see the Clinical & Externship bounded context below. Named relations
+  // because a single User can appear on the same model in more than one
+  // capacity (e.g. a Coordinator both creates a Site and later determines
+  // eligibility), exactly the pattern Grade's GradeEnteredBy/GradeApprovedBy
+  // already established.
+  eligibilityDeterminations ExternshipEligibility[] @relation("EligibilityDeterminedBy")
+  eligibilityAsStudent      ExternshipEligibility[] @relation("EligibilityStudent")
+  clinicalSitesCreated      ClinicalSite[]          @relation("ClinicalSiteCreatedBy")
+  placementsAsStudent       Placement[]             @relation("PlacementStudent")
+  placementsRequested       Placement[]             @relation("PlacementRequestedBy")
+  placementsHoursAttested   Placement[]             @relation("PlacementHoursAttestedBy")
+  placementsCompletionSubmitted Placement[]          @relation("PlacementCompletionSubmittedBy")
+  placementsCompletionVerified  Placement[]          @relation("PlacementCompletionVerifiedBy")
+  evaluationsRecorded       Evaluation[]             @relation("EvaluationRecordedBy")
 
   @@map("users")
 }
@@ -162,6 +184,14 @@ model Program {
   enrollments     Enrollment[]
   roleAssignments RoleAssignment[]
   competencies    Competency[]
+
+  // Milestone 15: the Clinical & Externship bounded context is
+  // Program-scoped, per ROLE_SCOPE.CLINICAL_COORDINATOR in
+  // src/domain/roles.ts and the Clinical & Externship Domain Model
+  // (docs/milestones/milestone-5-domain-model-data-architecture/05-clinical-externship-domain-model.md).
+  eligibilityDeterminations ExternshipEligibility[]
+  clinicalSites             ClinicalSite[]
+  placements                Placement[]
 
   @@map("programs")
 }
@@ -456,6 +486,172 @@ model Grade {
   approvedAt   DateTime?
 
   @@map("grades")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Clinical & Externship bounded context (Milestone 15 — Externship
+// Eligibility & Placement Vertical Slice)
+// (docs/milestones/milestone-5-domain-model-data-architecture/05-clinical-externship-domain-model.md,
+// narrowed per
+// docs/milestones/milestone-15-externship-eligibility-placement-vertical-slice/04-externship-deep-dive.md)
+//
+// Activates the already-declared CLINICAL_COORDINATOR role (see
+// src/domain/roles.ts) rather than introducing a new one. Deliberately
+// excludes, per the Deep Dive: Employer as a platform actor/login (an
+// Employer/Preceptor is recorded as plain text fields below, not an
+// entity with its own identity or account), Site Agreements, itemized
+// Hours Logs (a single Coordinator attestation stands in for this
+// slice), and any specific hour/eligibility/evaluation-score threshold —
+// every such number would be invented, which this milestone's
+// instructions explicitly forbid. Where a real number would eventually
+// go, the schema instead carries a narrative/status field a Coordinator
+// or Program Director fills in with their own judgment.
+// ─────────────────────────────────────────────────────────────────────────
+
+// A Program-scoped eligibility determination for a Student's externship
+// placement. There is deliberately no automated rule engine — per the
+// Deep Dive's item 1, a Coordinator records this by reviewing the
+// Student's existing academic record (Enrollment, approved Grades) and
+// the platform never claims to compute it. The ABSENCE of a row for a
+// given (studentId, programId) is itself meaningful: it means no
+// determination has ever been made, which service-layer reads surface
+// as "Requirements Pending Verification" — never as a fabricated
+// pass/fail default. `status` intentionally excludes any numeric
+// threshold (GPA, credit count, etc.); `notes` is where a Coordinator
+// records their reasoning against whatever academic record they
+// reviewed.
+model ExternshipEligibility {
+  id             String   @id @default(cuid())
+  studentId      String
+  student        User     @relation("EligibilityStudent", fields: [studentId], references: [id])
+  programId      String
+  program        Program  @relation(fields: [programId], references: [id])
+  status         String // ELIGIBLE | NOT_YET_ELIGIBLE | BLOCKED
+  notes          String?
+  determinedById String
+  determinedBy   User     @relation("EligibilityDeterminedBy", fields: [determinedById], references: [id])
+  determinedAt   DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([studentId, programId])
+  @@map("externship_eligibilities")
+}
+
+// A specific off-campus site a Student can be placed at, to fulfill a
+// Program's externship requirement. Per the Deep Dive, Employer is
+// represented here as plain contact fields, not a separate entity with
+// its own login (Employer Partner remains a dormant, un-activated Role
+// — see src/domain/roles.ts) — this is the single largest scope
+// narrowing in this milestone, made deliberately, not by oversight.
+// status lifecycle: PENDING (newly recorded) -> ACTIVE (Coordinator has
+// approved it for placements) -> INACTIVE (no longer used).
+model ClinicalSite {
+  id            String   @id @default(cuid())
+  programId     String
+  program       Program  @relation(fields: [programId], references: [id])
+  name          String
+  employerName  String
+  contactName   String?
+  contactInfo   String?
+  capacity      Int      @default(1)
+  status        String   @default("PENDING")
+  createdById   String
+  createdBy     User     @relation("ClinicalSiteCreatedBy", fields: [createdById], references: [id])
+  createdAt     DateTime @default(now())
+
+  placements Placement[]
+
+  @@index([programId])
+  @@map("clinical_sites")
+}
+
+// The record of one Student's placement at one Clinical Site. Two
+// independent status fields, deliberately not conflated, per this
+// milestone's explicit instruction to distinguish "evaluation
+// completed," "placement completed," and "completion verified":
+//
+// `status` (REQUESTED -> APPROVED -> ACTIVE -> COMPLETED) is the
+// placement's own lifecycle — "evaluation completed" is not tracked as
+// a field here at all, it is simply whether a FINAL-type Evaluation row
+// exists for this Placement (queried, not stored, so it can never drift
+// out of sync with the Evaluation rows themselves).
+//
+// `completionStatus` (NOT_SUBMITTED -> SUBMITTED -> VERIFIED, or ->
+// RETURNED for the remediation loop) is the Coordinator + Program
+// Director joint approval gate — the exact same shape as
+// LessonVersion/AssessmentVersion's status + returnReason pattern from
+// Milestones 13/14, applied here a third time rather than reinvented.
+// `status` only advances to COMPLETED when `completionStatus` reaches
+// VERIFIED — that transition is the one place the two fields are linked,
+// enforced in src/services/externship/externship.ts, never left to two
+// independently-writable fields to agree by convention.
+//
+// `hoursAttestedAt`/`hoursAttestedById` stand in for the itemized Hours
+// Log the Deep Dive defers (#9) — a single Coordinator attestation that
+// hours are complete, with no specific hour count enforced by the
+// platform (that number is ⚠️ Needs Verification pending
+// Minara-Curriculum, per ADR-008 and this milestone's own constraints).
+model Placement {
+  id             String    @id @default(cuid())
+  studentId      String
+  student        User      @relation("PlacementStudent", fields: [studentId], references: [id])
+  programId      String
+  program        Program   @relation(fields: [programId], references: [id])
+  clinicalSiteId String
+  clinicalSite   ClinicalSite @relation(fields: [clinicalSiteId], references: [id])
+
+  preceptorName    String?
+  preceptorContact String?
+
+  status String @default("REQUESTED")
+
+  hoursAttestedAt   DateTime?
+  hoursAttestedById String?
+  hoursAttestedBy   User?     @relation("PlacementHoursAttestedBy", fields: [hoursAttestedById], references: [id])
+
+  completionStatus       String    @default("NOT_SUBMITTED")
+  completionReturnReason String?
+  completionSubmittedAt   DateTime?
+  completionSubmittedById String?
+  completionSubmittedBy   User?     @relation("PlacementCompletionSubmittedBy", fields: [completionSubmittedById], references: [id])
+  completionVerifiedAt    DateTime?
+  completionVerifiedById  String?
+  completionVerifiedBy    User?     @relation("PlacementCompletionVerifiedBy", fields: [completionVerifiedById], references: [id])
+
+  requestedById String
+  requestedBy   User   @relation("PlacementRequestedBy", fields: [requestedById], references: [id])
+  createdAt     DateTime @default(now())
+
+  evaluations Evaluation[]
+
+  @@index([studentId])
+  @@index([programId])
+  @@index([clinicalSiteId])
+  @@map("placements")
+}
+
+// A Midpoint or Final evaluation recorded against a Placement.
+// Deliberately minimal, per the Deep Dive's #12–14: free-text content
+// plus a single overall outcome flag, not a structured multi-criteria
+// rubric (a full rubric/competency-checklist engine remains Future).
+// `recordedById` is always the Coordinator's User id — never an
+// Employer's — since this slice records the evaluation on the
+// Employer/Preceptor's behalf rather than giving them direct
+// self-service submission (see ClinicalSite's comment above for the
+// same narrowing rationale).
+model Evaluation {
+  id          String   @id @default(cuid())
+  placementId String
+  placement   Placement @relation(fields: [placementId], references: [id])
+  type        String // MIDPOINT | FINAL
+  content     String
+  outcome     String   @default("SATISFACTORY") // SATISFACTORY | CONCERNS_IDENTIFIED
+  recordedById String
+  recordedBy  User     @relation("EvaluationRecordedBy", fields: [recordedById], references: [id])
+  createdAt   DateTime @default(now())
+
+  @@index([placementId])
+  @@map("evaluations")
 }
 
 // ─────────────────────────────────────────────────────────────────────────

@@ -2,6 +2,14 @@ import "server-only";
 import { redirect } from "next/navigation";
 import { getSessionUser, type SessionUser } from "@/services/identity/session";
 import { ROLE_HOME_ROUTE, type Role } from "@/domain/roles";
+import { isAdministrator, hasRoleForProgram, hasRoleForCourseOffering, hasAnyRole } from "@/services/identity/rbac";
+
+// Re-exported unchanged — see src/services/identity/rbac.ts's header
+// comment for why these moved there (Milestone 15). Every existing
+// import site in this codebase (`import { hasRoleForProgram } from
+// "@/services/identity/authorization"`, etc.) continues to work exactly
+// as before; only the physical location of the implementation changed.
+export { isAdministrator, hasRoleForProgram, hasRoleForCourseOffering, hasAnyRole };
 
 /**
  * Centralized authorization enforcement — the single component every
@@ -36,40 +44,6 @@ export async function requireSessionUser(): Promise<SessionUser> {
     redirect("/login");
   }
   return user;
-}
-
-/** True if the User holds an institution-wide Administrator Role Assignment. */
-export function isAdministrator(user: SessionUser): boolean {
-  return user.roleAssignments.some((ra) => ra.role === "ADMINISTRATOR");
-}
-
-/** True if the User holds the given Role, scoped to the given Program (or institution-wide, for Administrator). */
-export function hasRoleForProgram(
-  user: SessionUser,
-  role: Role,
-  programId: string,
-): boolean {
-  if (isAdministrator(user)) return true;
-  return user.roleAssignments.some(
-    (ra) => ra.role === role && ra.programId === programId,
-  );
-}
-
-/** True if the User holds the given Role, scoped to the given Course Offering (or institution-wide, for Administrator). */
-export function hasRoleForCourseOffering(
-  user: SessionUser,
-  role: Role,
-  courseOfferingId: string,
-): boolean {
-  if (isAdministrator(user)) return true;
-  return user.roleAssignments.some(
-    (ra) => ra.role === role && ra.courseOfferingId === courseOfferingId,
-  );
-}
-
-/** True if the User holds the given Role at all, in any scope (used for coarse checks like "is this a Faculty account"). */
-export function hasAnyRole(user: SessionUser, role: Role): boolean {
-  return user.roleAssignments.some((ra) => ra.role === role);
 }
 
 /**

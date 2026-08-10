@@ -1,10 +1,13 @@
-# Milestone 15 — Planning & Architecture Checkpoint
+# Milestone 15 — Planning & Architecture Checkpoint, then Implementation
 
-**Status:** Draft
-**Phase:** Architecture/product review — plans the next extension of Milestones 10–14's implementation
-**Date:** 2026-08-07
-**Scope:** Documentation only. No production code, database schemas,
-APIs, or vendor selections are introduced in this milestone.
+**Status:** Implemented
+**Phase:** Architecture/product review (2026-08-07), followed by implementation (2026-08-10)
+**Date:** 2026-08-07 (planning) / 2026-08-10 (implementation)
+**Scope:** Documents 01–06 below are the original documentation-only
+planning package, unchanged since they were drafted. Document 07 is the
+[Implementation Completion Record](./07-implementation-completion-record.md)
+added once the recommended slice was actually built — see that document
+for exactly what was implemented versus what remains Planned/Future.
 
 ## Purpose
 
@@ -21,10 +24,13 @@ Management specifically (since Pharmacy Technology, the chosen launch
 Program, likely requires one), and one concrete recommendation for what
 Milestone 15's *implementation* should actually be.
 
-**This milestone is planning, not code** — exactly like Milestone 12 was
-for Milestone 13. Implementation begins only after this package is
-reviewed, per the same gate every prior milestone's planning phase went
-through.
+**Documents 01–06 were written as planning, not code** — the same
+discipline Milestone 12 followed before Milestone 13's implementation.
+Unlike that split, this milestone's implementation was carried out under
+the same milestone number (per the user's own framing of the
+implementation task as "Milestone 15... Implementation") rather than a
+new Milestone 16 — see [07-implementation-completion-record.md](./07-implementation-completion-record.md)
+for the as-built record.
 
 ## Documents in This Milestone
 
@@ -37,6 +43,7 @@ through.
 | 5 | [Externship Management — Deep Dive](./04-externship-deep-dive.md) | Question 4 — 20-item evaluation of every named Externship capability |
 | 6 | [Milestone 15 Recommendation](./05-milestone-15-recommendation.md) | Question 6 — the one recommended Milestone 15: Externship Eligibility & Placement Vertical Slice |
 | 7 | [Implementation Readiness Review](./06-implementation-readiness-review.md) | Question 7 — **CONDITIONAL GO**, consolidated Needs Verification list, exact implementation sequence |
+| 8 | [Implementation Completion Record](./07-implementation-completion-record.md) | What was actually built, once the CONDITIONAL GO's default resolutions were accepted and implementation proceeded |
 
 ## The Recommendation, In Brief
 
@@ -57,7 +64,7 @@ for exactly what should be confirmed before coding starts.
 |---|---|
 | **Milestone 10 (Foundation Build)** | The implemented base every capability in the [inventory](./01-architecture-checkpoint-capability-inventory.md) is measured against. |
 | **Milestone 13/14 (Curriculum Delivery / Content Versioning)** | The most recently proven pattern (approval-gate, audit extension, fail-closed visibility) this checkpoint recommends reusing a fourth time, not reinventing. |
-| **Milestone 15 (this checkpoint)** | Plans the next implementation milestone. Per ADR-011, that implementation happens only after this plan is reviewed — the same gate Milestone 12 went through before Milestone 13 began. |
+| **Milestone 15 (this checkpoint)** | Planned, then implemented, the Externship Eligibility & Placement Vertical Slice — see [Implementation Completion Record](./07-implementation-completion-record.md). |
 
 ## Scope Boundaries
 
@@ -92,16 +99,18 @@ implementation phase follows):**
 | Element | Status |
 |---|---|
 | Milestones 10, 13, 14 (implemented) | **Current** |
-| This checkpoint's seven-question review | **Draft** — this milestone |
-| Externship Eligibility & Placement Vertical Slice (recommended implementation) | **Planned**, **CONDITIONAL GO** — see [Readiness Review](./06-implementation-readiness-review.md) |
+| This checkpoint's seven-question review (documents 01–06) | **Current** — the historical planning record, unmodified |
+| Externship Eligibility & Placement Vertical Slice | **Implemented** — see [Implementation Completion Record](./07-implementation-completion-record.md) |
 | Certificate & Graduation, Payments, self-service Admissions | **Planned**, sequenced after this slice, per [Candidate Ranking](./03-vertical-slice-candidate-ranking.md) |
 | Course-level versioning, Employer self-service, itemized Hours Log, Analytics, AI Tutor | **Future** |
 
 ## Approval
 
-This milestone is **Draft** pending stakeholder review. Per
-[ADR-011](../../architecture/adr/ADR-011-vertical-slice-development-strategy.md),
-implementation should not begin until this plan — and specifically the
-three conditions in the
-[Implementation Readiness Review](./06-implementation-readiness-review.md) —
-are reviewed and confirmed.
+The planning package (documents 01–06) went through the
+[Implementation Readiness Review](./06-implementation-readiness-review.md)'s
+**CONDITIONAL GO** — its three named conditions were resolved with the
+pragmatic defaults that review itself proposed (Coordinator/Program-
+Director judgment fields instead of platform-enforced numbers; the
+narrowing decisions accepted; `src/services/externship/` as the service
+module location). Implementation then proceeded and is complete — see
+[07-implementation-completion-record.md](./07-implementation-completion-record.md).
