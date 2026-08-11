@@ -22,6 +22,7 @@ import {
   ContentStateError,
 } from "@/services/academic/content-workflow";
 import { createCompetency } from "@/services/academic/competency";
+import { issueCertificate, GraduationStateError, GraduationAuthorizationError } from "@/services/graduation/graduation";
 
 export interface ActionState {
   error?: string;
@@ -365,4 +366,32 @@ export async function createCompetencyAction(
   await createCompetency(parsed.data, user.id);
   revalidatePath("/admin/competencies");
   return { success: "Competency created." };
+}
+
+// ── Certificate issuance — Milestone 16 ──────────────────────────────────
+//
+// Institution-wide Administrator authority, the same authority split as
+// publishContentAction above (Program Director approves within scope;
+// Administrator performs the institution-wide act of record).
+// issueCertificate itself enforces this (this milestone's "never rely
+// exclusively on page-level protection," carried forward from Milestone
+// 15) — requireAdmin() here is the page-level belt, not the buckle.
+
+/**
+ * Bound to a plain `<form action={...}>` — see publishContentAction's
+ * comment above for why this throws rather than returning a state.
+ */
+export async function issueCertificateAction(requestId: string, _formData: FormData): Promise<void> {
+  const user = await requireAdmin();
+
+  try {
+    await issueCertificate(requestId, user);
+  } catch (error) {
+    if (error instanceof GraduationStateError || error instanceof GraduationAuthorizationError) {
+      throw new Error(error.message);
+    }
+    throw error;
+  }
+
+  revalidatePath("/admin/graduation");
 }

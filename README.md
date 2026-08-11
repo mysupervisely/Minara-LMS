@@ -1,7 +1,7 @@
 # Minara-LMS
 
-**Status:** Milestones 10 (Foundation Build), 13 (Curriculum Delivery Vertical Slice), 14 (Content Versioning Vertical Slice), and 15 (Externship Eligibility & Placement Vertical Slice) implemented · Milestone 11 (Curriculum Management & Content Engine) documentation drafted, pending approval
-**Last Updated:** 2026-08-10
+**Status:** Milestones 10 (Foundation Build), 13 (Curriculum Delivery Vertical Slice), 14 (Content Versioning Vertical Slice), 15 (Externship Eligibility & Placement Vertical Slice), and 16 (Certificate & Graduation Vertical Slice) implemented · Milestone 11 (Curriculum Management & Content Engine) documentation drafted, pending approval
+**Last Updated:** 2026-08-11
 
 ## What This Repository Is
 
@@ -116,6 +116,23 @@ for the full planning package and the
 [Implementation Completion Record](./docs/milestones/milestone-15-externship-eligibility-placement-vertical-slice/07-implementation-completion-record.md)
 for exactly what was built.
 
+**Milestone 16 — Certificate & Graduation Vertical Slice —
+implemented.** The final leg of the Student Lifecycle Workflow: academic
+completion → externship completion (when the Program requires one, read
+directly from Milestone 15's `Placement.completionStatus === "VERIFIED"`
+signal, never recomputed) → graduation eligibility (a derived, fail-closed
+computation — never persisted) → Program Director review (approve or
+return with a required reason, the same approval-gate shape reused a
+fifth time) → institutional Certificate issuance (Administrator-only) →
+the Student's Enrollment transitioning to Alumni status, reusing the
+existing `Enrollment.status` field with an additive value rather than a
+new entity. No new RBAC role, no invented GPA/hour/competency
+requirement, no PDF or public verification service — see
+[docs/milestones/milestone-16-certificate-graduation-vertical-slice/](./docs/milestones/milestone-16-certificate-graduation-vertical-slice/README.md)
+for the full design and the
+[Implementation Completion Record](./docs/milestones/milestone-16-certificate-graduation-vertical-slice/07-implementation-completion-record.md)
+for exactly what was built.
+
 ## Documentation
 
 All architecture and product documentation lives under [`docs/`](./docs).
@@ -137,6 +154,6 @@ Open [http://localhost:3000](http://localhost:3000). See
 for the full environment strategy this local setup implements.
 
 ```bash
-npm test                 # runs the Vitest suite (auth, RBAC, curriculum delivery, versioning, and externship workflow tests)
+npm test                 # runs the Vitest suite (auth, RBAC, curriculum delivery, versioning, externship, and graduation/certificate workflow tests)
 npm run build             # production build
 ```

@@ -89,7 +89,21 @@ export type AuditAction =
   | "EVALUATION_CREATED"
   | "EXTERNSHIP_COMPLETION_SUBMITTED"
   | "EXTERNSHIP_COMPLETION_VERIFIED"
-  | "EXTERNSHIP_COMPLETION_RETURNED";
+  | "EXTERNSHIP_COMPLETION_RETURNED"
+  // Milestone 16 — Certificate & Graduation Vertical Slice. Extends this
+  // same union rather than a second audit mechanism, per this
+  // milestone's explicit instruction. GRADUATION_ELIGIBILITY_DETERMINED
+  // is emitted as part of submitForGraduationReview (the moment a live
+  // eligibility computation gates a real, consequential action) — see
+  // src/services/graduation/graduation.ts; eligibility itself is never
+  // persisted, so there is no separate "determination" row to audit
+  // independent of that submission.
+  | "GRADUATION_ELIGIBILITY_DETERMINED"
+  | "GRADUATION_SUBMITTED"
+  | "GRADUATION_APPROVED"
+  | "GRADUATION_RETURNED"
+  | "CERTIFICATE_ISSUED"
+  | "ALUMNI_STATUS_ASSIGNED";
 
 export interface RecordAuditEventInput {
   /** The acting User's id, or null for a system-initiated event (e.g. a failed login for an unknown email). */

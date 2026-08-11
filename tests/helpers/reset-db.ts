@@ -11,6 +11,13 @@ import { db } from "@/lib/db";
 export async function resetDatabase() {
   await db.auditLog.deleteMany();
 
+  // Milestone 16 — Certificate & Graduation Vertical Slice: Certificate
+  // -> GraduationRequest, both referencing User/Program only — safe to
+  // clear anywhere before program.deleteMany()/user.deleteMany(). Cleared
+  // first since Certificate has a required FK to GraduationRequest.
+  await db.certificate.deleteMany();
+  await db.graduationRequest.deleteMany();
+
   // Milestone 15 — Externship Eligibility & Placement Vertical Slice:
   // Evaluation -> Placement -> ClinicalSite -> ExternshipEligibility, all
   // referencing User/Program, none referencing anything deleted below —

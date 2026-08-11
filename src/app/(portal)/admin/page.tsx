@@ -8,16 +8,27 @@ export const metadata: Metadata = { title: "Administrator Overview" };
 export default async function AdminOverviewPage() {
   const user = await requireSessionUserWithRole("ADMINISTRATOR");
 
-  const [institutionCount, programCount, userCount, enrollmentCount, pendingGrades, clinicalSiteCount, placementCount] =
-    await Promise.all([
-      db.institution.count(),
-      db.program.count(),
-      db.user.count(),
-      db.enrollment.count(),
-      db.grade.count({ where: { status: "SUBMITTED" } }),
-      db.clinicalSite.count(),
-      db.placement.count(),
-    ]);
+  const [
+    institutionCount,
+    programCount,
+    userCount,
+    enrollmentCount,
+    pendingGrades,
+    clinicalSiteCount,
+    placementCount,
+    graduationRequestsAwaitingIssuance,
+    certificatesIssued,
+  ] = await Promise.all([
+    db.institution.count(),
+    db.program.count(),
+    db.user.count(),
+    db.enrollment.count(),
+    db.grade.count({ where: { status: "SUBMITTED" } }),
+    db.clinicalSite.count(),
+    db.placement.count(),
+    db.graduationRequest.count({ where: { status: "APPROVED" } }),
+    db.certificate.count(),
+  ]);
 
   return (
     <div className="stack">
@@ -36,6 +47,13 @@ export default async function AdminOverviewPage() {
             there via hasRoleForProgram's own Administrator bypass. */}
         <StatCard label="Clinical Sites" value={clinicalSiteCount} href="/coordinator/sites" />
         <StatCard label="Externship Placements" value={placementCount} href="/coordinator/placements" />
+        {/* Milestone 16 — Certificate & Graduation Vertical Slice. */}
+        <StatCard
+          label="Graduation Requests Awaiting Certificate"
+          value={graduationRequestsAwaitingIssuance}
+          href="/admin/graduation"
+        />
+        <StatCard label="Certificates Issued" value={certificatesIssued} href="/admin/graduation" />
       </div>
     </div>
   );

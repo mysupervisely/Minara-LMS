@@ -18,6 +18,14 @@ import {
   ExternshipStateError,
   ExternshipAuthorizationError,
 } from "@/services/externship/externship";
+import {
+  submitForGraduationReview,
+  approveGraduation,
+  returnGraduationReview,
+  getGraduationRequestById,
+  GraduationStateError,
+  GraduationAuthorizationError,
+} from "@/services/graduation/graduation";
 
 async function assertProgramDirectorOwnsGrade(gradeId: string, userId: string) {
   const grade = await getGradeForApproval(gradeId);
@@ -220,5 +228,104 @@ export async function returnCompletionAction(
 
   revalidatePath("/program-director/externship");
   revalidatePath(`/program-director/externship/${placementId}`);
+  return { success: true };
+}
+
+// ── Graduation & Certificate — Milestone 16 ─────────────────────────────
+//
+// submitForGraduationReview/approveGraduation/returnGraduationReview in
+// src/services/graduation/graduation.ts already enforce Program scope
+// themselves (this milestone's "never rely exclusively on page-level
+// protection" instruction, carried forward from Milestone 15) — the
+// hasRoleForProgram check below is the same defense-in-depth belt this
+// file already applies to Grade, Content, and Externship review above.
+
+function messageForGraduationError(error: unknown): string {
+  if (error instanceof GraduationStateError || error instanceof GraduationAuthorizationError) {
+    return error.message;
+  }
+  throw error;
+}
+
+/** Bound to a plain `<form action={...}>` — see approveGradeAction's comment above for why this throws rather than returning a state. */
+export async function submitForGraduationReviewAction(
+  studentId: string,
+  programId: string,
+  _formData: FormData,
+): Promise<void> {
+  const user = await requireSessionUserWithRole("PROGRAM_DIRECTOR");
+  const isAdministrator = user.roleAssignments.some((ra) => ra.role === "ADMINISTRATOR");
+  if (!isAdministrator && !hasRoleForProgram(user, "PROGRAM_DIRECTOR", programId)) {
+    throw new Error("You do not oversee this Program.");
+  }
+
+  try {
+    await submitForGraduationReview(studentId, programId, user);
+  } catch (error) {
+    throw new Error(messageForGraduationError(error));
+  }
+
+  revalidatePath("/program-director/graduation");
+}
+
+async function assertProgramDirectorOwnsGraduationRequest(requestId: string, userId: string) {
+  const user = await requireSessionUserWithRole("PROGRAM_DIRECTOR");
+  if (user.id !== userId) throw new Error("Session mismatch.");
+
+  // getGraduationRequestById already enforces Program scope itself
+  // (throws GraduationAuthorizationError for a PD outside the owning
+  // Program) — calling it here is both the "not found" check and the
+  // scope check in one, consistent with this file's existing
+  // double-enforcement style for Grade/Content/Externship review above.
+  let request;
+  try {
+    request = await getGraduationRequestById(requestId, user);
+  } catch (error) {
+    throw new Error(messageForGraduationError(error));
+  }
+  if (!request) throw new Error("Graduation Request not found.");
+
+  return { request, user };
+}
+
+/** Bound to a plain `<form action={...}>` — see approveGradeAction's comment above for why this throws rather than returning a state. */
+export async function approveGraduationAction(requestId: string, _formData: FormData): Promise<void> {
+  const user = await requireSessionUserWithRole("PROGRAM_DIRECTOR");
+  await assertProgramDirectorOwnsGraduationRequest(requestId, user.id);
+
+  try {
+    await approveGraduation(requestId, user);
+  } catch (error) {
+    throw new Error(messageForGraduationError(error));
+  }
+
+  revalidatePath("/program-director/graduation");
+  revalidatePath(`/program-director/graduation/${requestId}`);
+}
+
+export interface ReturnGraduationState {
+  error?: string;
+  success?: boolean;
+}
+
+export async function returnGraduationReviewAction(
+  requestId: string,
+  _prevState: ReturnGraduationState,
+  formData: FormData,
+): Promise<ReturnGraduationState> {
+  const user = await requireSessionUserWithRole("PROGRAM_DIRECTOR");
+  await assertProgramDirectorOwnsGraduationRequest(requestId, user.id);
+
+  const reason = String(formData.get("reason") ?? "").trim();
+  if (!reason) return { error: "A reason is required when returning a Graduation Request for further work." };
+
+  try {
+    await returnGraduationReview(requestId, reason, user);
+  } catch (error) {
+    return { error: messageForGraduationError(error) };
+  }
+
+  revalidatePath("/program-director/graduation");
+  revalidatePath(`/program-director/graduation/${requestId}`);
   return { success: true };
 }

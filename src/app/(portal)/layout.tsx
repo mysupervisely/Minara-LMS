@@ -32,6 +32,7 @@ export default async function PortalLayout({ children }: { children: React.React
               { href: "/student/grades", label: "My Grades" },
               { href: "/student/competencies", label: "My Competencies" },
               { href: "/student/externship", label: "My Externship" },
+              { href: "/student/graduation", label: "Graduation & Certificate" },
             ]}
           />
         )}
@@ -48,6 +49,7 @@ export default async function PortalLayout({ children }: { children: React.React
               { href: "/program-director", label: "Grade Approvals" },
               { href: "/program-director/content", label: "Curriculum Review" },
               { href: "/program-director/externship", label: "Completion Verification" },
+              { href: "/program-director/graduation", label: "Graduation Candidates" },
             ]}
           />
         )}
@@ -72,6 +74,7 @@ export default async function PortalLayout({ children }: { children: React.React
               { href: "/admin/institution", label: "Institution Structure" },
               { href: "/admin/competencies", label: "Competencies" },
               { href: "/admin/content", label: "Publishing Queue" },
+              { href: "/admin/graduation", label: "Certificate Issuance" },
               { href: "/admin/users", label: "Users & Roles" },
               { href: "/admin/enrollments", label: "Enrollments" },
               { href: "/admin/audit", label: "Audit Log" },

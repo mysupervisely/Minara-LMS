@@ -1,25 +1,32 @@
 // Minara-LMS — Prisma schema for the Milestone 10 vertical slice, extended
 // by Milestone 13 (content approval/publishing lifecycle + a minimal
-// Competency), Milestone 14 (immutable Lesson/Assessment versioning), and
+// Competency), Milestone 14 (immutable Lesson/Assessment versioning),
 // Milestone 15 (a narrow Externship Eligibility & Placement slice —
-// ExternshipEligibility, ClinicalSite, Placement, Evaluation).
+// ExternshipEligibility, ClinicalSite, Placement, Evaluation), and
+// Milestone 16 (a narrow Certificate & Graduation slice —
+// GraduationRequest, Certificate; Enrollment gains an "ALUMNI" status
+// value, no schema change required).
 //
 // This schema implements a deliberately narrow subset of the domain model
 // documented in docs/milestones/milestone-5-domain-model-data-architecture/,
 // scoped to what the vertical slice in
 // docs/milestones/milestone-9-engineering-foundation-development-setup/10-first-implementation-roadmap.md
-// and ADR-011 require, applied three times more (Milestones 13, 14, and 15)
-// per that same ADR's discipline of proving one narrow slice at a time
+// and ADR-011 require, applied four times more (Milestones 13, 14, 15, and
+// 16) per that same ADR's discipline of proving one narrow slice at a time
 // rather than building the full
 // docs/milestones/milestone-11-curriculum-management-content-engine/ engine
-// (or the full Clinical & Externship Domain Model) at once. It is still NOT
-// full curriculum management — there is no Module layer between Course and
-// Lesson, no Question Bank, no Program/Course-level versioning (only
-// Lesson/Assessment), and no full Competency/Learning Outcome hierarchy
-// (only a minimal, Program-scoped Competency, per Milestone 13's Domain
-// Impact Review). It is also NOT the full Externship Management system —
-// no Employer/Preceptor login, no Site Agreements, no itemized Hours Log —
-// per Milestone 15's own Externship Deep Dive.
+// (or the full Clinical & Externship / Certificate & Graduation domain
+// models) at once. It is still NOT full curriculum management — there is no
+// Module layer between Course and Lesson, no Question Bank, no Program/
+// Course-level versioning (only Lesson/Assessment), and no full
+// Competency/Learning Outcome hierarchy (only a minimal, Program-scoped
+// Competency, per Milestone 13's Domain Impact Review). It is also NOT the
+// full Externship Management system — no Employer/Preceptor login, no Site
+// Agreements, no itemized Hours Log — per Milestone 15's own Externship
+// Deep Dive. It is also NOT a full graduation/transcript system — no
+// transcript management, no continuing education, no credential-
+// verification integration, no certificate revocation workflow — per
+// Milestone 16's own scope boundaries.
 //
 // Database engine: SQLite for local development and this vertical slice's
 // demonstrability, per the "database/domain decisions made" note in the
@@ -92,6 +99,16 @@ model User {
   placementsCompletionSubmitted Placement[]          @relation("PlacementCompletionSubmittedBy")
   placementsCompletionVerified  Placement[]          @relation("PlacementCompletionVerifiedBy")
   evaluationsRecorded       Evaluation[]             @relation("EvaluationRecordedBy")
+
+  // Milestone 16 (Certificate & Graduation Vertical Slice) — see the
+  // Graduation bounded context below. Same named-relation pattern as
+  // Grade's GradeEnteredBy/GradeApprovedBy: one User can appear on the
+  // same GraduationRequest in more than one capacity over its lifetime.
+  graduationRequestsAsStudent   GraduationRequest[] @relation("GraduationRequestStudent")
+  graduationRequestsSubmitted   GraduationRequest[] @relation("GraduationRequestSubmittedBy")
+  graduationRequestsApproved    GraduationRequest[] @relation("GraduationRequestApprovedBy")
+  certificatesAsStudent         Certificate[]       @relation("CertificateStudent")
+  certificatesIssued            Certificate[]       @relation("CertificateIssuedBy")
 
   @@map("users")
 }
@@ -192,6 +209,12 @@ model Program {
   eligibilityDeterminations ExternshipEligibility[]
   clinicalSites             ClinicalSite[]
   placements                Placement[]
+
+  // Milestone 16: Program-scoped, per Program Director's existing
+  // ROLE_SCOPE ("program") — the same scoping every other approval-gate
+  // bounded context in this schema already uses.
+  graduationRequests GraduationRequest[]
+  certificates       Certificate[]
 
   @@map("programs")
 }
@@ -652,6 +675,99 @@ model Evaluation {
 
   @@index([placementId])
   @@map("evaluations")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Graduation bounded context (Milestone 16 — Certificate & Graduation
+// Vertical Slice)
+// (docs/milestones/milestone-16-certificate-graduation-vertical-slice/)
+//
+// Deliberately does NOT persist "eligibility" as its own row/status.
+// Whether a Student is eligible is always computed live by
+// src/services/graduation/graduation.ts's determineGraduationEligibility
+// — from existing LessonCompletion/Submission/Grade/Placement facts,
+// never duplicated here — per this milestone's own "derived
+// determination wherever practical" instruction. A GraduationRequest row
+// only comes into existence once a real, consequential workflow action
+// happens: a Program Director (or Administrator) submits an already-
+// eligible Student for formal review. This mirrors
+// ExternshipEligibility's "absence is meaningful" pattern one step
+// further: here, absence means "not yet submitted," not merely
+// "undetermined."
+// ─────────────────────────────────────────────────────────────────────────
+
+// The formal graduation review record for one Student in one Program.
+// Reuses the exact status+returnReason shape LessonVersion/
+// AssessmentVersion (Milestones 13/14) and Placement.completionStatus
+// (Milestone 15) already established — a fourth application of the same
+// approval-gate pattern, not a new one. status lifecycle: SUBMITTED (a
+// Program Director/Administrator submitted an eligible Student for
+// review) -> APPROVED (Program Director approved) -> CERTIFICATE_ISSUED
+// (Administrator completed institutional issuance, terminal), with a
+// RETURNED side-branch from SUBMITTED back toward resubmission — the
+// returnReason is preserved and visible to whoever resubmits, exactly
+// like a returned content Version.
+model GraduationRequest {
+  id String @id @default(cuid())
+
+  studentId String
+  student   User   @relation("GraduationRequestStudent", fields: [studentId], references: [id])
+  programId String
+  program   Program @relation(fields: [programId], references: [id])
+
+  status       String    @default("SUBMITTED") // SUBMITTED | APPROVED | RETURNED | CERTIFICATE_ISSUED
+  returnReason String?
+
+  submittedById String
+  submittedBy   User     @relation("GraduationRequestSubmittedBy", fields: [submittedById], references: [id])
+  submittedAt   DateTime @default(now())
+
+  approvedById String?
+  approvedBy   User?     @relation("GraduationRequestApprovedBy", fields: [approvedById], references: [id])
+  approvedAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  certificate Certificate?
+
+  @@unique([studentId, programId])
+  @@index([programId])
+  @@map("graduation_requests")
+}
+
+// The smallest useful institutional record of a credential issued to a
+// Student — created exactly once per GraduationRequest, only by
+// issueCertificate (Administrator, institution-wide authority, per the
+// same authority split Milestone 13's publishContent already
+// established: Program Director approves within scope, Administrator
+// performs the institution-wide act of record). `credentialNumber` is a
+// simple, internally-generated identifier, not a public verification
+// URL or an external credential-verification integration — both
+// explicitly out of scope for this milestone. `status` exists for
+// future extension (e.g. REVOKED) but this slice only ever writes
+// "ISSUED" — no revocation workflow is built here.
+model Certificate {
+  id String @id @default(cuid())
+
+  graduationRequestId String            @unique
+  graduationRequest   GraduationRequest @relation(fields: [graduationRequestId], references: [id])
+
+  studentId String
+  student   User   @relation("CertificateStudent", fields: [studentId], references: [id])
+  programId String
+  program   Program @relation(fields: [programId], references: [id])
+
+  credentialNumber String @unique
+  status           String @default("ISSUED")
+
+  issuedById String
+  issuedBy   User     @relation("CertificateIssuedBy", fields: [issuedById], references: [id])
+  issuedAt   DateTime @default(now())
+
+  @@index([studentId])
+  @@index([programId])
+  @@map("certificates")
 }
 
 // ─────────────────────────────────────────────────────────────────────────

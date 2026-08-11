@@ -10,14 +10,26 @@ import {
   createCourseOffering,
   createLesson,
 } from "@/services/academic/institution";
-import { createAssessment } from "@/services/assessments/assessments";
-import { createEnrollment } from "@/services/enrollment/enrollment";
+import { createAssessment, submitAssessment } from "@/services/assessments/assessments";
+import { createEnrollment, markLessonComplete } from "@/services/enrollment/enrollment";
 import { createCompetency } from "@/services/academic/competency";
 import {
   submitContentForReview,
   approveContent,
   publishContent,
 } from "@/services/academic/content-workflow";
+import { enterGrade, submitGradeForApproval, approveGrade } from "@/services/gradebook/gradebook";
+import {
+  createClinicalSite,
+  updateClinicalSiteStatus,
+  requestPlacement,
+  approvePlacement,
+  activatePlacement,
+  recordEvaluation,
+  attestHoursComplete,
+  submitCompletionForVerification,
+  verifyCompletion,
+} from "@/services/externship/externship";
 
 /**
  * Test fixtures — deliberately built through the real service functions
@@ -212,4 +224,78 @@ export async function buildExternshipScenario() {
   });
 
   return { ...scenario, coordinator };
+}
+
+/**
+ * Milestone 16 (Certificate & Graduation Vertical Slice): walks a
+ * scenario's Student through the single Lesson and single Assessment
+ * `buildAcademicStructure` creates — completing the Lesson, submitting
+ * the Assessment, and carrying its Grade all the way to Approved —
+ * through the exact same service functions the real Student/Faculty/
+ * Program Director portal screens use. This is what
+ * determineGraduationEligibility's "academic completion" checks for; it
+ * duplicates no fact, only exercises the real completion/grading path.
+ */
+export async function completeAcademicWork(
+  scenario: Awaited<ReturnType<typeof buildFullScenario>>,
+) {
+  await markLessonComplete({ studentId: scenario.student.id, lessonId: scenario.lesson.id });
+
+  const submission = await submitAssessment({
+    assessmentId: scenario.assessment.id,
+    studentId: scenario.student.id,
+    courseOfferingId: scenario.courseOffering.id,
+    content: "A complete answer.",
+  });
+  const grade = await enterGrade({
+    submissionId: submission.id,
+    score: 90,
+    enteredById: scenario.faculty.id,
+  });
+  await submitGradeForApproval(grade.id, scenario.faculty.id);
+  await approveGrade(grade.id, scenario.programDirector.id);
+
+  return { submission, grade };
+}
+
+/**
+ * Milestone 16: walks a `buildExternshipScenario` Student's Placement all
+ * the way to a Program-Director-Verified Completion — the exact signal
+ * determineGraduationEligibility reads directly, via the real Milestone
+ * 15 service functions, never recomputed or duplicated here.
+ */
+export async function verifyExternshipForStudent(
+  scenario: Awaited<ReturnType<typeof buildExternshipScenario>>,
+) {
+  const coordinator = await actorFor(scenario.coordinator.id);
+  const programDirector = await actorFor(scenario.programDirector.id);
+
+  const site = await createClinicalSite(
+    { programId: scenario.program.id, name: "Test Site", employerName: "Test Employer" },
+    coordinator,
+  );
+  await updateClinicalSiteStatus(site.id, "ACTIVE", coordinator);
+  const placement = await requestPlacement(
+    { studentId: scenario.student.id, programId: scenario.program.id, clinicalSiteId: site.id },
+    coordinator,
+  );
+  await approvePlacement(placement.id, coordinator);
+  await activatePlacement(placement.id, coordinator);
+  await recordEvaluation(
+    { placementId: placement.id, type: "FINAL", content: "Ready.", outcome: "SATISFACTORY" },
+    coordinator,
+  );
+  await attestHoursComplete(placement.id, coordinator);
+  await submitCompletionForVerification(placement.id, coordinator);
+  await verifyCompletion(placement.id, programDirector);
+
+  return placement;
+}
+
+/** A buildExternshipScenario, walked all the way to graduation-eligible: complete academic work + a Verified externship Placement. */
+export async function buildGraduationReadyScenario() {
+  const scenario = await buildExternshipScenario();
+  await completeAcademicWork(scenario);
+  await verifyExternshipForStudent(scenario);
+  return scenario;
 }

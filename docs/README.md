@@ -50,6 +50,7 @@ Minara-Master-Plan):
 | 13 | Curriculum Delivery Vertical Slice — Implementation — *implementation milestone, no documentation directory; see [repository root README](../README.md) and [Milestone 12's plan](./milestones/milestone-12-curriculum-delivery-vertical-slice/README.md)* | Implemented |
 | 14 | Content Versioning Vertical Slice — Implementation — *implementation milestone, no documentation directory; see [repository root README](../README.md)* | Implemented |
 | 15 | [Planning & Architecture Checkpoint, then Externship Eligibility & Placement Vertical Slice — Implementation](./milestones/milestone-15-externship-eligibility-placement-vertical-slice/README.md) | Implemented |
+| 16 | [Certificate & Graduation Vertical Slice](./milestones/milestone-16-certificate-graduation-vertical-slice/README.md) | Implemented |
 
 Milestones 1–9 and the ADR foundation are documentation-only. Milestone 10
 is this repository's first implementation milestone — a working, tested
@@ -73,9 +74,17 @@ directory, since the checkpoint's inventory/ranking/deep-dive is worth
 keeping as a permanent record), then implements the narrow slice that
 checkpoint recommended — Externship Eligibility & Placement — under the
 same milestone number rather than a new one, recorded in that directory's
-own Implementation Completion Record. Implementation against the
-remainder of Milestone 11's full engine begins only after it, too, is
-reviewed and approved.
+own Implementation Completion Record. Milestone 16 is application code
+in the same shape as 13/14 (implemented directly, no separate
+planning-only phase), but — like Milestone 15 — keeps a `docs/milestones/`
+directory because it names the specific derived-eligibility design,
+certificate model, and workflow decisions worth keeping as a permanent
+record. It implements the final leg of the Student Lifecycle Workflow:
+academic completion → externship completion (when the Program requires
+one, read directly from Milestone 15's own signal) → graduation
+eligibility → review → approval → certificate issuance → Alumni status.
+Implementation against the remainder of Milestone 11's full engine
+begins only after it, too, is reviewed and approved.
 
 ## Architecture Decision Records
 

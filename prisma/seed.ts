@@ -41,6 +41,22 @@
  * demonstrates the full Externship Eligibility & Placement lifecycle out
  * of the box too.
  *
+ * Milestone 16 update: a second Student, Gina Graduate, is added and
+ * walked all the way to an issued Certificate and Alumni status —
+ * deliberately a *different* Student from Sam Student above, not the
+ * same one. Sam Student's Milestone 14/15 demonstrations (a Lesson still
+ * awaiting completion of its new Version; a Placement mid-lifecycle) stay
+ * exactly as they were — pushing Sam through graduation would flip their
+ * Enrollment to Alumni and quietly break those still-useful manual-
+ * testing demonstrations. Gina instead completes both Lessons (against
+ * whichever Version is currently published — Lesson 1's v2, proving the
+ * versioning guarantee holds for a new Student's activity too), the
+ * Assessment, and a full externship Placement, then is submitted,
+ * approved, and issued a Certificate through
+ * src/services/graduation/graduation.ts — so a freshly seeded database
+ * demonstrates the complete Certificate & Graduation Vertical Slice out
+ * of the box as well.
+ *
  * Run with: npm run db:seed
  * Safe to re-run against an empty database; not idempotent against a
  * database that already has data (it will create duplicates or fail on
@@ -81,6 +97,11 @@ import {
   submitCompletionForVerification,
   verifyCompletion,
 } from "../src/services/externship/externship";
+import {
+  submitForGraduationReview,
+  approveGraduation,
+  issueCertificate,
+} from "../src/services/graduation/graduation";
 import { db } from "../src/lib/db";
 import type { SessionUser } from "../src/services/identity/session";
 
@@ -207,7 +228,7 @@ async function main() {
     },
     faculty.id,
   );
-  const { version: lesson2v1 } = await createLesson(
+  const { lesson: lesson2, version: lesson2v1 } = await createLesson(
     {
       courseId: course.id,
       title: "Dosage Calculations",
@@ -383,22 +404,112 @@ async function main() {
   await submitCompletionForVerification(placement.id, coordinatorActor);
   await verifyCompletion(placement.id, programDirectorActor);
 
+  // 8. Milestone 16's Certificate & Graduation Vertical Slice — a
+  // *second* Student, Gina Graduate (see the module comment above for
+  // why not Sam Student), walked through academic completion (both
+  // Lessons — against whichever Version is currently published, Lesson
+  // 1's v2 — and the Assessment, graded and Approved), a full externship
+  // Placement Verified the same way Section 7 walked Sam's, then
+  // eligibility → submission → approval → Certificate issuance → Alumni,
+  // through src/services/graduation/graduation.ts — the same functions
+  // the real Program Director/Administrator portal screens call. No
+  // specific GPA, course name, or graduation date appears anywhere below.
+  const graduate = await createUser({
+    name: "Gina Graduate",
+    email: "graduate@minara.edu",
+    password: DEMO_PASSWORD,
+    actorId: admin.id,
+  });
+  await createEnrollment(
+    { studentId: graduate.id, programId: program.id, cohortId: cohort.id },
+    admin.id,
+  );
+
+  await markLessonComplete({ studentId: graduate.id, lessonId: lesson1.id });
+  await markLessonComplete({ studentId: graduate.id, lessonId: lesson2.id });
+
+  const graduateSubmission = await submitAssessment({
+    assessmentId: assessment.id,
+    studentId: graduate.id,
+    courseOfferingId: courseOffering.id,
+    content:
+      "Therapeutic classification groups drugs by what condition they treat; mechanism of action " +
+      "groups drugs by how they work at the cellular level.",
+  });
+  const graduateGrade = await enterGrade({
+    submissionId: graduateSubmission.id,
+    score: 92,
+    feedback: "Clear and complete.",
+    enteredById: faculty.id,
+  });
+  await submitGradeForApproval(graduateGrade.id, faculty.id);
+  await approveGrade(graduateGrade.id, programDirector.id);
+
+  const graduateSite = await createClinicalSite(
+    {
+      programId: program.id,
+      name: "Cedar Grove Pharmacy",
+      employerName: "Cedar Grove Health Partners",
+      contactName: "Morgan Preceptor",
+      contactInfo: "morgan@cedargrovehealth.example",
+      capacity: 1,
+    },
+    coordinatorActor,
+  );
+  await updateClinicalSiteStatus(graduateSite.id, "ACTIVE", coordinatorActor);
+  const graduatePlacement = await requestPlacement(
+    {
+      studentId: graduate.id,
+      programId: program.id,
+      clinicalSiteId: graduateSite.id,
+      preceptorName: "Morgan Preceptor",
+      preceptorContact: "morgan@cedargrovehealth.example",
+    },
+    coordinatorActor,
+  );
+  await approvePlacement(graduatePlacement.id, coordinatorActor);
+  await activatePlacement(graduatePlacement.id, coordinatorActor);
+  await recordEvaluation(
+    {
+      placementId: graduatePlacement.id,
+      type: "FINAL",
+      content: "Ready for independent practice.",
+      outcome: "SATISFACTORY",
+    },
+    coordinatorActor,
+  );
+  await attestHoursComplete(graduatePlacement.id, coordinatorActor);
+  await submitCompletionForVerification(graduatePlacement.id, coordinatorActor);
+  await verifyCompletion(graduatePlacement.id, programDirectorActor);
+
+  const adminActor = await actorFor(admin.id);
+  const graduationRequest = await submitForGraduationReview(graduate.id, program.id, programDirectorActor);
+  await approveGraduation(graduationRequest.id, programDirectorActor);
+  const certificate = await issueCertificate(graduationRequest.id, adminActor);
+
   console.log("Seed complete. Demo accounts (all use the same password):\n");
   console.log(`  Administrator       admin@minara.edu`);
   console.log(`  Faculty             faculty@minara.edu`);
   console.log(`  Program Director    director@minara.edu`);
   console.log(`  Clinical Coordinator coordinator@minara.edu`);
   console.log(`  Student             student@minara.edu`);
+  console.log(`  Student (Alumni)    graduate@minara.edu`);
   console.log(`  Password (all)      ${DEMO_PASSWORD}\n`);
   console.log(
-    "Lesson 1 now has two Versions — v1 (Published, completed by the Student before v2 existed) " +
-      "and v2 (Published, now the live version delivered to Students; the Student has not yet " +
+    "Lesson 1 now has two Versions — v1 (Published, completed by Sam Student before v2 existed) " +
+      "and v2 (Published, now the live version delivered to Students; Sam Student has not yet " +
       "completed it) — demonstrating Milestone 14's versioning guarantee out of the box.",
   );
   console.log(
-    "The Student's externship Placement at Riverbend Community Pharmacy has been carried through " +
+    "Sam Student's externship Placement at Riverbend Community Pharmacy has been carried through " +
       "eligibility, activation, both evaluations, and a Program-Director-verified Completion — " +
       "demonstrating Milestone 15's full narrow slice out of the box.",
+  );
+  console.log(
+    `Gina Graduate has completed all coursework (against Lesson 1's current v2), had her ` +
+      `externship Verified, and been carried through graduation review to an issued Certificate ` +
+      `(credential ${certificate.credentialNumber}) — her Enrollment is now ALUMNI — demonstrating ` +
+      "Milestone 16's full narrow slice out of the box.",
   );
   console.log("Assessment id for manual testing:", assessment.id);
 }
