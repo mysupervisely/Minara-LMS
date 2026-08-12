@@ -8,24 +8,33 @@ import type { Role } from "@/domain/roles";
  * User account creation and Role Assignment management.
  *
  * Per Milestone 10, Phase 3 ("User account creation") and Phase 4
- * ("Implement role-based access control"). Consistent with the MVP's
- * "manual, Administrator-provisioned Enrollment" scope
- * (docs/milestones/milestone-7-mvp-definition-implementation-planning/02-mvp-scope-definition.md)
- * and this milestone's explicit "Out of Scope: Admissions automation,"
- * there is no public self-service registration page — account creation
- * happens through the Administrator foundation (see
- * src/app/(portal)/admin), consistent with
+ * ("Implement role-based access control"). Through Milestone 16, this
+ * milestone's MVP scope decision held: "manual, Administrator-
+ * provisioned Enrollment"
+ * (docs/milestones/milestone-7-mvp-definition-implementation-planning/02-mvp-scope-definition.md),
+ * so account creation happened only through the Administrator
+ * foundation (see src/app/(portal)/admin), consistent with
  * docs/milestones/milestone-4-information-architecture/08-administrator-portal.md's
  * User Accounts and Role Assignments screens.
  *
- * `actorId` accepts `null` in both functions below specifically to
+ * Milestone 17 (Admissions & Enrollment Vertical Slice) adds the one
+ * narrow exception `registerApplicant` below — self-service account
+ * creation, scoped only to the public `/apply` flow. It creates a plain
+ * User with zero Role Assignments (an "Applicant" is not a Role; see
+ * prisma/schema.prisma's Admissions bounded context comment) — no
+ * Role is auto-granted here, unlike `createEnrollment`'s STUDENT grant,
+ * because holding an Application confers no platform access on its own.
+ * Every other account-creation path in this codebase (Faculty, Program
+ * Director, Administrator, Clinical Coordinator, Admissions Staff)
+ * remains Administrator-provisioned, unchanged.
+ *
+ * `actorId` accepts `null` in `createUser`/`assignRole` specifically to
  * support bootstrapping the very first Administrator account in a
- * fresh deployment (see prisma/seed.ts) — there is, by definition, no
- * existing Administrator to attribute that one creation to. A null
- * actor is recorded as a system-initiated event, per
+ * fresh deployment (see prisma/seed.ts), and now also a self-registering
+ * Applicant — in both cases there is, by definition, no existing
+ * authenticated actor to attribute the creation to. A null actor is
+ * recorded as a system/self-initiated event, per
  * src/services/audit/audit.ts, never silently omitted from the trail.
- * Every other caller in this codebase (the Administrator foundation
- * screens) passes a real, authenticated Administrator's id.
  */
 
 export interface CreateUserInput {
@@ -33,6 +42,13 @@ export interface CreateUserInput {
   password: string;
   name: string;
   actorId: string | null;
+}
+
+export class EmailAlreadyRegisteredError extends Error {
+  constructor(message = "An account with this email already exists. Try logging in instead.") {
+    super(message);
+    this.name = "EmailAlreadyRegisteredError";
+  }
 }
 
 export async function createUser(input: CreateUserInput) {
@@ -55,6 +71,25 @@ export async function createUser(input: CreateUserInput) {
   });
 
   return user;
+}
+
+/**
+ * Milestone 17: the one public, self-service account-creation entry
+ * point in this codebase — see this module's header comment. Grants no
+ * Role Assignment; the created User can log in immediately (Phase 1's
+ * "create an account or sign in") but has no portal access until an
+ * Enrollment or a staff-assigned Role gives them one.
+ */
+export async function registerApplicant(input: {
+  email: string;
+  password: string;
+  name: string;
+}) {
+  const existing = await db.user.findUnique({ where: { email: input.email.toLowerCase().trim() } });
+  if (existing) {
+    throw new EmailAlreadyRegisteredError();
+  }
+  return createUser({ ...input, actorId: null });
 }
 
 export interface AssignRoleInput {

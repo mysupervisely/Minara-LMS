@@ -14,10 +14,12 @@ export const metadata: Metadata = { title: "Users & Roles" };
  * control... Create the foundation so future roles can be added").
  *
  * All seven Roles from src/domain/roles.ts appear in the role selector
- * below — Admissions Staff, Clinical Coordinator, and Employer Partner
- * can be assigned here even though no portal exists for them yet in
- * this vertical slice, matching this milestone's explicit instruction
- * to build RBAC so those roles can be added later without rework.
+ * below — originally so Admissions Staff, Clinical Coordinator, and
+ * Employer Partner could be assigned even before a portal existed for
+ * them, matching Milestone 10's explicit instruction to build RBAC so
+ * those roles can be added later without rework. Clinical Coordinator
+ * (Milestone 15) and Admissions Staff (Milestone 17) now both have
+ * working portals; only Employer Partner remains unimplemented.
  */
 export default async function AdminUsersPage() {
   await requireSessionUserWithRole("ADMINISTRATOR");

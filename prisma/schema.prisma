@@ -2,10 +2,12 @@
 // by Milestone 13 (content approval/publishing lifecycle + a minimal
 // Competency), Milestone 14 (immutable Lesson/Assessment versioning),
 // Milestone 15 (a narrow Externship Eligibility & Placement slice —
-// ExternshipEligibility, ClinicalSite, Placement, Evaluation), and
-// Milestone 16 (a narrow Certificate & Graduation slice —
-// GraduationRequest, Certificate; Enrollment gains an "ALUMNI" status
-// value, no schema change required).
+// ExternshipEligibility, ClinicalSite, Placement, Evaluation), Milestone 16
+// (a narrow Certificate & Graduation slice — GraduationRequest, Certificate;
+// Enrollment gains an "ALUMNI" status value, no schema change required), and
+// Milestone 17 (a narrow Admissions & Enrollment slice — Application,
+// ApplicationRequirement; Enrollment gains an additive, nullable
+// sourceApplicationId trace-back field).
 //
 // This schema implements a deliberately narrow subset of the domain model
 // documented in docs/milestones/milestone-5-domain-model-data-architecture/,
@@ -26,7 +28,11 @@
 // Deep Dive. It is also NOT a full graduation/transcript system — no
 // transcript management, no continuing education, no credential-
 // verification integration, no certificate revocation workflow — per
-// Milestone 16's own scope boundaries.
+// Milestone 16's own scope boundaries. It is also NOT a full admissions/CRM
+// system — no document OCR, no external CRM integration, no financial aid/
+// payment processing, no background-check or immunization tracking, no
+// automated/AI acceptance decisions — per Milestone 17's own scope
+// boundaries.
 //
 // Database engine: SQLite for local development and this vertical slice's
 // demonstrability, per the "database/domain decisions made" note in the
@@ -90,25 +96,35 @@ model User {
   // capacity (e.g. a Coordinator both creates a Site and later determines
   // eligibility), exactly the pattern Grade's GradeEnteredBy/GradeApprovedBy
   // already established.
-  eligibilityDeterminations ExternshipEligibility[] @relation("EligibilityDeterminedBy")
-  eligibilityAsStudent      ExternshipEligibility[] @relation("EligibilityStudent")
-  clinicalSitesCreated      ClinicalSite[]          @relation("ClinicalSiteCreatedBy")
-  placementsAsStudent       Placement[]             @relation("PlacementStudent")
-  placementsRequested       Placement[]             @relation("PlacementRequestedBy")
-  placementsHoursAttested   Placement[]             @relation("PlacementHoursAttestedBy")
-  placementsCompletionSubmitted Placement[]          @relation("PlacementCompletionSubmittedBy")
-  placementsCompletionVerified  Placement[]          @relation("PlacementCompletionVerifiedBy")
-  evaluationsRecorded       Evaluation[]             @relation("EvaluationRecordedBy")
+  eligibilityDeterminations     ExternshipEligibility[] @relation("EligibilityDeterminedBy")
+  eligibilityAsStudent          ExternshipEligibility[] @relation("EligibilityStudent")
+  clinicalSitesCreated          ClinicalSite[]          @relation("ClinicalSiteCreatedBy")
+  placementsAsStudent           Placement[]             @relation("PlacementStudent")
+  placementsRequested           Placement[]             @relation("PlacementRequestedBy")
+  placementsHoursAttested       Placement[]             @relation("PlacementHoursAttestedBy")
+  placementsCompletionSubmitted Placement[]             @relation("PlacementCompletionSubmittedBy")
+  placementsCompletionVerified  Placement[]             @relation("PlacementCompletionVerifiedBy")
+  evaluationsRecorded           Evaluation[]            @relation("EvaluationRecordedBy")
 
   // Milestone 16 (Certificate & Graduation Vertical Slice) — see the
   // Graduation bounded context below. Same named-relation pattern as
   // Grade's GradeEnteredBy/GradeApprovedBy: one User can appear on the
   // same GraduationRequest in more than one capacity over its lifetime.
-  graduationRequestsAsStudent   GraduationRequest[] @relation("GraduationRequestStudent")
-  graduationRequestsSubmitted   GraduationRequest[] @relation("GraduationRequestSubmittedBy")
-  graduationRequestsApproved    GraduationRequest[] @relation("GraduationRequestApprovedBy")
-  certificatesAsStudent         Certificate[]       @relation("CertificateStudent")
-  certificatesIssued            Certificate[]       @relation("CertificateIssuedBy")
+  graduationRequestsAsStudent GraduationRequest[] @relation("GraduationRequestStudent")
+  graduationRequestsSubmitted GraduationRequest[] @relation("GraduationRequestSubmittedBy")
+  graduationRequestsApproved  GraduationRequest[] @relation("GraduationRequestApprovedBy")
+  certificatesAsStudent       Certificate[]       @relation("CertificateStudent")
+  certificatesIssued          Certificate[]       @relation("CertificateIssuedBy")
+
+  // Milestone 17 (Admissions & Enrollment Vertical Slice) — see the
+  // Admissions bounded context below. "Applicant" is not a Role — it is
+  // simply a User with an Application and (yet) no STUDENT Role
+  // Assignment, per the Admissions Workflows doc's own framing. Named
+  // relations for the same reason as Grade/GraduationRequest above: one
+  // User can appear on the same Application in more than one capacity.
+  applicationsAsApplicant Application[]            @relation("ApplicationApplicant")
+  applicationsDecided     Application[]            @relation("ApplicationDecidedBy")
+  requirementsUpdated     ApplicationRequirement[] @relation("ApplicationRequirementUpdatedBy")
 
   @@map("users")
 }
@@ -216,6 +232,10 @@ model Program {
   graduationRequests GraduationRequest[]
   certificates       Certificate[]
 
+  // Milestone 17: Program-scoped, per the Admissions Workflows doc — an
+  // Application always targets exactly one Program.
+  applications Application[]
+
   @@map("programs")
 }
 
@@ -259,6 +279,11 @@ model Cohort {
 
   enrollments     Enrollment[]
   courseOfferings CourseOffering[]
+
+  // Milestone 17: an accepted Applicant is assigned to a Cohort (Phase 8
+  // — "the minimum needed to enroll an accepted applicant into an
+  // available Cohort," no capacity-management engine).
+  applications Application[]
 
   @@map("cohorts")
 }
@@ -431,6 +456,15 @@ model Enrollment {
 
   submissions Submission[]
 
+  // Milestone 17: nullable, additive trace-back to the Application this
+  // Enrollment was created from, when it was created through the
+  // Admissions workflow rather than directly by an Administrator (the
+  // Milestone 10 MVP path, still supported and unchanged). Preserves the
+  // Application record rather than overwriting or duplicating any of its
+  // history — see docs/milestones/milestone-17-.../07-enrollment-handoff.md.
+  sourceApplicationId String?      @unique
+  sourceApplication   Application? @relation(fields: [sourceApplicationId], references: [id])
+
   @@unique([studentId, programId])
   @@index([programId])
   @@index([cohortId])
@@ -569,18 +603,18 @@ model ExternshipEligibility {
 // status lifecycle: PENDING (newly recorded) -> ACTIVE (Coordinator has
 // approved it for placements) -> INACTIVE (no longer used).
 model ClinicalSite {
-  id            String   @id @default(cuid())
-  programId     String
-  program       Program  @relation(fields: [programId], references: [id])
-  name          String
-  employerName  String
-  contactName   String?
-  contactInfo   String?
-  capacity      Int      @default(1)
-  status        String   @default("PENDING")
-  createdById   String
-  createdBy     User     @relation("ClinicalSiteCreatedBy", fields: [createdById], references: [id])
-  createdAt     DateTime @default(now())
+  id           String   @id @default(cuid())
+  programId    String
+  program      Program  @relation(fields: [programId], references: [id])
+  name         String
+  employerName String
+  contactName  String?
+  contactInfo  String?
+  capacity     Int      @default(1)
+  status       String   @default("PENDING")
+  createdById  String
+  createdBy    User     @relation("ClinicalSiteCreatedBy", fields: [createdById], references: [id])
+  createdAt    DateTime @default(now())
 
   placements Placement[]
 
@@ -615,11 +649,11 @@ model ClinicalSite {
 // platform (that number is ⚠️ Needs Verification pending
 // Minara-Curriculum, per ADR-008 and this milestone's own constraints).
 model Placement {
-  id             String    @id @default(cuid())
+  id             String       @id @default(cuid())
   studentId      String
-  student        User      @relation("PlacementStudent", fields: [studentId], references: [id])
+  student        User         @relation("PlacementStudent", fields: [studentId], references: [id])
   programId      String
-  program        Program   @relation(fields: [programId], references: [id])
+  program        Program      @relation(fields: [programId], references: [id])
   clinicalSiteId String
   clinicalSite   ClinicalSite @relation(fields: [clinicalSiteId], references: [id])
 
@@ -632,8 +666,8 @@ model Placement {
   hoursAttestedById String?
   hoursAttestedBy   User?     @relation("PlacementHoursAttestedBy", fields: [hoursAttestedById], references: [id])
 
-  completionStatus       String    @default("NOT_SUBMITTED")
-  completionReturnReason String?
+  completionStatus        String    @default("NOT_SUBMITTED")
+  completionReturnReason  String?
   completionSubmittedAt   DateTime?
   completionSubmittedById String?
   completionSubmittedBy   User?     @relation("PlacementCompletionSubmittedBy", fields: [completionSubmittedById], references: [id])
@@ -642,7 +676,7 @@ model Placement {
   completionVerifiedBy    User?     @relation("PlacementCompletionVerifiedBy", fields: [completionVerifiedById], references: [id])
 
   requestedById String
-  requestedBy   User   @relation("PlacementRequestedBy", fields: [requestedById], references: [id])
+  requestedBy   User     @relation("PlacementRequestedBy", fields: [requestedById], references: [id])
   createdAt     DateTime @default(now())
 
   evaluations Evaluation[]
@@ -663,15 +697,15 @@ model Placement {
 // self-service submission (see ClinicalSite's comment above for the
 // same narrowing rationale).
 model Evaluation {
-  id          String   @id @default(cuid())
-  placementId String
-  placement   Placement @relation(fields: [placementId], references: [id])
-  type        String // MIDPOINT | FINAL
-  content     String
-  outcome     String   @default("SATISFACTORY") // SATISFACTORY | CONCERNS_IDENTIFIED
+  id           String    @id @default(cuid())
+  placementId  String
+  placement    Placement @relation(fields: [placementId], references: [id])
+  type         String // MIDPOINT | FINAL
+  content      String
+  outcome      String    @default("SATISFACTORY") // SATISFACTORY | CONCERNS_IDENTIFIED
   recordedById String
-  recordedBy  User     @relation("EvaluationRecordedBy", fields: [recordedById], references: [id])
-  createdAt   DateTime @default(now())
+  recordedBy   User      @relation("EvaluationRecordedBy", fields: [recordedById], references: [id])
+  createdAt    DateTime  @default(now())
 
   @@index([placementId])
   @@map("evaluations")
@@ -711,11 +745,11 @@ model GraduationRequest {
   id String @id @default(cuid())
 
   studentId String
-  student   User   @relation("GraduationRequestStudent", fields: [studentId], references: [id])
+  student   User    @relation("GraduationRequestStudent", fields: [studentId], references: [id])
   programId String
   program   Program @relation(fields: [programId], references: [id])
 
-  status       String    @default("SUBMITTED") // SUBMITTED | APPROVED | RETURNED | CERTIFICATE_ISSUED
+  status       String  @default("SUBMITTED") // SUBMITTED | APPROVED | RETURNED | CERTIFICATE_ISSUED
   returnReason String?
 
   submittedById String
@@ -754,7 +788,7 @@ model Certificate {
   graduationRequest   GraduationRequest @relation(fields: [graduationRequestId], references: [id])
 
   studentId String
-  student   User   @relation("CertificateStudent", fields: [studentId], references: [id])
+  student   User    @relation("CertificateStudent", fields: [studentId], references: [id])
   programId String
   program   Program @relation(fields: [programId], references: [id])
 
@@ -768,6 +802,83 @@ model Certificate {
   @@index([studentId])
   @@index([programId])
   @@map("certificates")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Admissions bounded context (Milestone 17 — Admissions & Enrollment
+// Vertical Slice), per
+// docs/milestones/milestone-3-student-journey-core-workflows/03-admissions-workflows.md.
+// "Applicant" is not a Role Assignment — it is simply a User (see
+// src/services/identity/users.ts's self-service createApplicantAccount)
+// with an Application and no STUDENT Role yet. Deliberately minimal: no
+// document-upload/OCR modeling, no financial-aid fields, no background-
+// check/immunization fields, no invented Pharmacy Technology admission
+// criteria (GPA, prerequisite courses, standardized tests) — see
+// docs/milestones/milestone-17-admissions-enrollment-vertical-slice/03-application-domain-workflow.md.
+// ─────────────────────────────────────────────────────────────────────────
+
+// status: DRAFT -> SUBMITTED -> UNDER_REVIEW -> ACCEPTED | DENIED |
+// WAITLISTED | DEFERRED, then for ACCEPTED: -> ACCEPTANCE_CONFIRMED |
+// ACCEPTANCE_DECLINED, then -> ENROLLED. WAITLISTED/DEFERRED can return to
+// UNDER_REVIEW ("re-enters Admissions Review," per the Admissions
+// Workflows doc's Waitlist/Deferral branches). This is the exact stage
+// sequence that document already defines — no new terminology invented.
+model Application {
+  id String @id @default(cuid())
+
+  applicantId String
+  applicant   User    @relation("ApplicationApplicant", fields: [applicantId], references: [id])
+  programId   String
+  program     Program @relation(fields: [programId], references: [id])
+
+  status         String    @default("DRAFT")
+  applicantNotes String?
+  decisionReason String?
+  submittedAt    DateTime?
+  decisionAt     DateTime?
+  decidedById    String?
+  decidedBy      User?     @relation("ApplicationDecidedBy", fields: [decidedById], references: [id])
+
+  // Set by Admissions Staff/Administrator once ACCEPTED, per Phase 8 —
+  // "the minimum needed to enroll an accepted applicant into an
+  // available Cohort," no capacity-management engine. Required before
+  // createEnrollmentFromApplication will convert this Application.
+  cohortId String?
+  cohort   Cohort? @relation(fields: [cohortId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  requirements ApplicationRequirement[]
+  enrollment   Enrollment?
+
+  @@index([programId])
+  @@index([applicantId])
+  @@map("applications")
+}
+
+// Phase 2's minimal checklist structure — status is one of RECEIVED |
+// MISSING | NEEDS_VERIFICATION | NOT_APPLICABLE (never silently
+// defaulted to "passed"; see the Application Domain & Workflow doc).
+// `label` is a free-text string, not a fixed enum of real Pharmacy
+// Technology requirements, because no authoritative document defines
+// that list yet — see this milestone's own ⚠️ Needs Verification items.
+model ApplicationRequirement {
+  id            String      @id @default(cuid())
+  applicationId String
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  label  String
+  status String  @default("NEEDS_VERIFICATION")
+  note   String?
+
+  updatedById String?
+  updatedBy   User?    @relation("ApplicationRequirementUpdatedBy", fields: [updatedById], references: [id])
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+
+  @@index([applicationId])
+  @@map("application_requirements")
 }
 
 // ─────────────────────────────────────────────────────────────────────────

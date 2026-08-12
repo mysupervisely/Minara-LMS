@@ -18,10 +18,21 @@
  * IMPLEMENTED_ROLES below. This is *activating* an already-declared
  * Role, not introducing a new one — its shape (ROLES, ROLE_LABELS,
  * ROLE_SCOPE) was fixed since Milestone 10 and required zero changes
- * here. ADMISSIONS_STAFF and EMPLOYER_PARTNER remain declared but not
- * implemented, per this milestone's explicit "no new RBAC roles"
+ * here. ADMISSIONS_STAFF and EMPLOYER_PARTNER remained declared but not
+ * implemented at that point, per Milestone 15's "no new RBAC roles"
  * constraint and its deliberate exclusion of Employer self-service
  * access (see the Externship Deep Dive).
+ *
+ * Milestone 17 (Admissions & Enrollment Vertical Slice) activates
+ * ADMISSIONS_STAFF the same way: a working Admissions Portal
+ * (src/app/(portal)/admissions) and service logic
+ * (src/services/admissions/admissions.ts), added to IMPLEMENTED_ROLES
+ * below. Its ROLE_SCOPE stays exactly "institution," fixed since
+ * Milestone 10 and unchanged here — see
+ * docs/milestones/milestone-17-admissions-enrollment-vertical-slice/04-admissions-rbac-design.md
+ * for why that scope (matching Administrator's, not Program Director's)
+ * is honored rather than redesigned. EMPLOYER_PARTNER remains declared
+ * but not implemented.
  *
  * Role values are plain strings, not a database enum, per the schema
  * comment in prisma/schema.prisma — this file (not the database) is the
@@ -44,13 +55,14 @@ export const ROLES = [
 
 export type Role = (typeof ROLES)[number];
 
-/** Roles with working implementation — STUDENT/FACULTY/PROGRAM_DIRECTOR/ADMINISTRATOR since Milestone 10, CLINICAL_COORDINATOR since Milestone 15. */
+/** Roles with working implementation — STUDENT/FACULTY/PROGRAM_DIRECTOR/ADMINISTRATOR since Milestone 10, CLINICAL_COORDINATOR since Milestone 15, ADMISSIONS_STAFF since Milestone 17. */
 export const IMPLEMENTED_ROLES: Role[] = [
   "STUDENT",
   "FACULTY",
   "PROGRAM_DIRECTOR",
   "ADMINISTRATOR",
   "CLINICAL_COORDINATOR",
+  "ADMISSIONS_STAFF",
 ];
 
 export const RoleSchema = z.enum(ROLES);
@@ -91,7 +103,7 @@ export const ROLE_HOME_ROUTE: Record<Role, string> = {
   FACULTY: "/faculty",
   PROGRAM_DIRECTOR: "/program-director",
   ADMINISTRATOR: "/admin",
-  ADMISSIONS_STAFF: "/admin",
+  ADMISSIONS_STAFF: "/admissions",
   CLINICAL_COORDINATOR: "/coordinator",
   EMPLOYER_PARTNER: "/admin",
 };

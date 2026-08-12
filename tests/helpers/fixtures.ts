@@ -30,6 +30,7 @@ import {
   submitCompletionForVerification,
   verifyCompletion,
 } from "@/services/externship/externship";
+import { startOrResumeApplication } from "@/services/admissions/admissions";
 
 /**
  * Test fixtures — deliberately built through the real service functions
@@ -298,4 +299,37 @@ export async function buildGraduationReadyScenario() {
   await completeAcademicWork(scenario);
   await verifyExternshipForStudent(scenario);
   return scenario;
+}
+
+/**
+ * Milestone 17 (Admissions & Enrollment Vertical Slice): a buildFullScenario
+ * plus one Admissions Staff User. Institution-wide, per ADMISSIONS_STAFF's
+ * ROLE_SCOPE (src/domain/roles.ts) — no programId on the Role Assignment,
+ * unlike Program Director/Clinical Coordinator's scenario additions.
+ */
+export async function buildAdmissionsScenario() {
+  const scenario = await buildFullScenario();
+
+  const admissionsStaff = await buildTestUser({ name: "Ada Admissions" });
+  await assignRole({ userId: admissionsStaff.id, role: "ADMISSIONS_STAFF", actorId: scenario.admin.id });
+
+  return { ...scenario, admissionsStaff };
+}
+
+/**
+ * A self-registering Applicant (via src/services/identity/users.ts's
+ * registerApplicant — the one self-service account-creation exception in
+ * this codebase, no Role Assignment) with a started Application against
+ * the given scenario's Program.
+ */
+export async function startApplicationFor(scenario: Awaited<ReturnType<typeof buildAdmissionsScenario>>) {
+  const applicant = await createUser({
+    name: unique("Applicant"),
+    email: unique("applicant") + "@example.test",
+    password: "test-password-123",
+    actorId: null,
+  });
+  const applicantActor = await actorFor(applicant.id);
+  const application = await startOrResumeApplication(applicant.id, scenario.program.id, applicantActor);
+  return { applicant, applicantActor, application };
 }

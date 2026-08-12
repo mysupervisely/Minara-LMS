@@ -53,8 +53,11 @@ export default async function ProgramDetailPage({
         )}
 
         <div className="button-row">
-          <Link className="button button--primary" href="/login">
-            Apply / Log In
+          <Link className="button button--primary" href={`/apply/program/${program.slug}`}>
+            Apply
+          </Link>
+          <Link className="button button--secondary" href="/login">
+            Log In
           </Link>
         </div>
       </div>

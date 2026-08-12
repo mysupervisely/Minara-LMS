@@ -79,10 +79,25 @@ export function requireAdministrator(user: SessionUser): void {
   }
 }
 
-/** Where to send a User immediately after login, based on their first Role Assignment. */
+/**
+ * Where to send a User immediately after login, based on their first
+ * Role Assignment.
+ *
+ * Milestone 17: a User can now hold zero Role Assignments — a
+ * self-registered Applicant (see src/services/identity/users.ts's
+ * registerApplicant) who has not yet been enrolled or staffed. That case
+ * previously fell back to "/login" (unreachable in practice before this
+ * milestone, since every account was Administrator-provisioned with at
+ * least one Role from the start); it now falls back to "/apply", the one
+ * portal area that only requires a session, not a Role (see
+ * src/app/(portal)/apply/page.tsx). A small, disclosed, additive change
+ * to a shared function — no existing caller's behavior changes, since
+ * every pre-Milestone-17 account still resolves via its first Role
+ * exactly as before.
+ */
 export function resolveHomeRoute(user: SessionUser): string {
   const primary = user.roleAssignments[0];
-  if (!primary) return "/login";
+  if (!primary) return "/apply";
   return ROLE_HOME_ROUTE[primary.role] ?? "/login";
 }
 

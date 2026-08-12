@@ -51,6 +51,7 @@ Minara-Master-Plan):
 | 14 | Content Versioning Vertical Slice — Implementation — *implementation milestone, no documentation directory; see [repository root README](../README.md)* | Implemented |
 | 15 | [Planning & Architecture Checkpoint, then Externship Eligibility & Placement Vertical Slice — Implementation](./milestones/milestone-15-externship-eligibility-placement-vertical-slice/README.md) | Implemented |
 | 16 | [Certificate & Graduation Vertical Slice](./milestones/milestone-16-certificate-graduation-vertical-slice/README.md) | Implemented |
+| 17 | [Admissions & Enrollment Vertical Slice](./milestones/milestone-17-admissions-enrollment-vertical-slice/README.md) | Implemented |
 
 Milestones 1–9 and the ADR foundation are documentation-only. Milestone 10
 is this repository's first implementation milestone — a working, tested
@@ -83,8 +84,21 @@ record. It implements the final leg of the Student Lifecycle Workflow:
 academic completion → externship completion (when the Program requires
 one, read directly from Milestone 15's own signal) → graduation
 eligibility → review → approval → certificate issuance → Alumni status.
-Implementation against the remainder of Milestone 11's full engine
-begins only after it, too, is reviewed and approved.
+Milestone 17 closes the loop at the *other* end of the Student Lifecycle
+Workflow — Admissions & Enrollment — in the same application-code shape
+as 16 (implemented directly, `docs/milestones/` kept for the same
+permanent-record reason). It follows
+[Admissions Workflows](./milestones/milestone-3-student-journey-core-workflows/03-admissions-workflows.md)'s
+own already-documented stage sequence: a prospective learner creates an
+account (the platform's one self-service exception to otherwise
+Administrator-provisioned accounts) → Application → Admissions Review →
+Decision → Acceptance Confirmation → Cohort assignment → Enrollment
+(reusing Milestone 10's `createEnrollment` unmodified) → Student Portal
+access. With Milestones 16 and 17 both implemented, the full Student
+Lifecycle Workflow (Admissions → Enrollment → Learning → Assessment →
+Grade → Externship → Graduation → Alumni) is demonstrable end-to-end for
+the first time. Implementation against the remainder of Milestone 11's
+full engine begins only after it, too, is reviewed and approved.
 
 ## Architecture Decision Records
 

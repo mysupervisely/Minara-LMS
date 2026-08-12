@@ -103,7 +103,29 @@ export type AuditAction =
   | "GRADUATION_APPROVED"
   | "GRADUATION_RETURNED"
   | "CERTIFICATE_ISSUED"
-  | "ALUMNI_STATUS_ASSIGNED";
+  | "ALUMNI_STATUS_ASSIGNED"
+  // Milestone 17 — Admissions & Enrollment Vertical Slice. Extends this
+  // same union a sixth time rather than a parallel admissions audit log,
+  // per this milestone's explicit instruction. Names follow this
+  // milestone's own brief verbatim where given.
+  // ENROLLMENT_CREATED_FROM_APPLICATION is a distinct action from the
+  // pre-existing ENROLLMENT_CREATED (still emitted by createEnrollment
+  // itself, unmodified) — two complementary facts on the same audit
+  // trail, exactly like VERSION_CREATED alongside LESSON_CREATED above,
+  // never a replacement for the original event.
+  | "APPLICATION_CREATED"
+  | "APPLICATION_SUBMITTED"
+  | "APPLICATION_REVIEW_STARTED"
+  | "APPLICATION_REOPENED_FOR_REVIEW"
+  | "REQUIREMENT_UPDATED"
+  | "APPLICATION_ACCEPTED"
+  | "APPLICATION_DENIED"
+  | "APPLICATION_WAITLISTED"
+  | "APPLICATION_DEFERRED"
+  | "APPLICATION_COHORT_ASSIGNED"
+  | "OFFER_CONFIRMED"
+  | "OFFER_DECLINED"
+  | "ENROLLMENT_CREATED_FROM_APPLICATION";
 
 export interface RecordAuditEventInput {
   /** The acting User's id, or null for a system-initiated event (e.g. a failed login for an unknown email). */

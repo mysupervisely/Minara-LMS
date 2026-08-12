@@ -31,6 +31,17 @@ export async function resetDatabase() {
   await db.submission.deleteMany();
   await db.lessonCompletion.deleteMany();
   await db.enrollment.deleteMany();
+
+  // Milestone 17 — Admissions & Enrollment Vertical Slice: Enrollment's
+  // sourceApplicationId references Application, so Enrollment must be
+  // cleared first (immediately above) — otherwise deleting an Application
+  // still referenced by an Enrollment would violate that foreign key.
+  // ApplicationRequirement cascades automatically
+  // (onDelete: Cascade in prisma/schema.prisma) but is cleared explicitly
+  // too, matching this file's own explicit-listing convention.
+  await db.applicationRequirement.deleteMany();
+  await db.application.deleteMany();
+
   await db.roleAssignment.deleteMany();
   await db.session.deleteMany();
   await db.courseOffering.deleteMany();

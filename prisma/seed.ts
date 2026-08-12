@@ -57,6 +57,18 @@
  * demonstrates the complete Certificate & Graduation Vertical Slice out
  * of the box as well.
  *
+ * Milestone 17 update: activates Admissions Staff (Aisha Admissions) and
+ * seeds five Applicants spanning every meaningful Application state —
+ * Devon Draft (DRAFT), Uma Underreview (SUBMITTED -> UNDER_REVIEW), Ana
+ * Accepted (ACCEPTED, offer not yet confirmed), Wes Waitlisted
+ * (WAITLISTED), and Owen Onboarded (walked all the way through Accepted
+ * -> Confirmed -> Cohort-assigned -> Enrolled, demonstrating the full
+ * Application -> Enrollment handoff and Student Portal access out of the
+ * box). Every Applicant is a *new* User created through
+ * src/services/identity/users.ts's registerApplicant (the one
+ * self-service account-creation path this milestone adds) — none of
+ * Sam/Gina/the staff accounts above are touched.
+ *
  * Run with: npm run db:seed
  * Safe to re-run against an empty database; not idempotent against a
  * database that already has data (it will create duplicates or fail on
@@ -64,7 +76,7 @@
  * not a migration.
  */
 
-import { createUser, assignRole } from "../src/services/identity/users";
+import { createUser, assignRole, registerApplicant } from "../src/services/identity/users";
 import {
   createInstitution,
   createSchool,
@@ -102,6 +114,15 @@ import {
   approveGraduation,
   issueCertificate,
 } from "../src/services/graduation/graduation";
+import {
+  startOrResumeApplication,
+  submitApplication,
+  startReview,
+  recordDecision,
+  confirmOffer,
+  assignCohort,
+  createEnrollmentFromApplication,
+} from "../src/services/admissions/admissions";
 import { db } from "../src/lib/db";
 import type { SessionUser } from "../src/services/identity/session";
 
@@ -487,13 +508,78 @@ async function main() {
   await approveGraduation(graduationRequest.id, programDirectorActor);
   const certificate = await issueCertificate(graduationRequest.id, adminActor);
 
+  // 9. Milestone 17's Admissions & Enrollment Vertical Slice — one
+  // Admissions Staff account, and five Applicants spanning every
+  // meaningful Application state (see the module comment above). Each
+  // Applicant is created through registerApplicant, the same
+  // self-service path the real /apply flow uses — not the
+  // Administrator-provisioned createUser every other account above
+  // uses — so a freshly seeded database also demonstrates that this
+  // milestone's one self-service exception actually works end to end.
+  const admissionsStaff = await createUser({
+    name: "Aisha Admissions",
+    email: "admissions@minara.edu",
+    password: DEMO_PASSWORD,
+    actorId: admin.id,
+  });
+  await assignRole({ userId: admissionsStaff.id, role: "ADMISSIONS_STAFF", actorId: admin.id });
+  const admissionsStaffActor = await actorFor(admissionsStaff.id);
+
+  // Applicant 1 — DRAFT, never submitted.
+  const devon = await registerApplicant({ name: "Devon Draft", email: "devon@example.com", password: DEMO_PASSWORD });
+  const devonActor = await actorFor(devon.id);
+  await startOrResumeApplication(devon.id, program.id, devonActor);
+
+  // Applicant 2 — SUBMITTED, then moved into UNDER_REVIEW.
+  const uma = await registerApplicant({ name: "Uma Underreview", email: "uma@example.com", password: DEMO_PASSWORD });
+  const umaActor = await actorFor(uma.id);
+  const umaApplication = await startOrResumeApplication(uma.id, program.id, umaActor);
+  await submitApplication(umaApplication.id, umaActor);
+  await startReview(umaApplication.id, admissionsStaffActor);
+
+  // Applicant 3 — ACCEPTED, offer not yet confirmed.
+  const ana = await registerApplicant({ name: "Ana Accepted", email: "ana@example.com", password: DEMO_PASSWORD });
+  const anaActor = await actorFor(ana.id);
+  const anaApplication = await startOrResumeApplication(ana.id, program.id, anaActor);
+  await submitApplication(anaApplication.id, anaActor);
+  await startReview(anaApplication.id, admissionsStaffActor);
+  await recordDecision(anaApplication.id, "ACCEPTED", "Strong supporting documents.", admissionsStaffActor);
+
+  // Applicant 4 — WAITLISTED, demonstrating the Decision branch that is
+  // neither an immediate Accept nor a terminal Deny.
+  const wes = await registerApplicant({ name: "Wes Waitlisted", email: "wes@example.com", password: DEMO_PASSWORD });
+  const wesActor = await actorFor(wes.id);
+  const wesApplication = await startOrResumeApplication(wes.id, program.id, wesActor);
+  await submitApplication(wesApplication.id, wesActor);
+  await startReview(wesApplication.id, admissionsStaffActor);
+  await recordDecision(wesApplication.id, "WAITLISTED", "Cohort is near capacity.", admissionsStaffActor);
+
+  // Applicant 5 — walked all the way through to an Enrolled Student,
+  // proving the full Admissions -> Enrollment handoff (and Student
+  // Portal access) out of the box.
+  const owen = await registerApplicant({ name: "Owen Onboarded", email: "owen@example.com", password: DEMO_PASSWORD });
+  const owenActor = await actorFor(owen.id);
+  const owenApplication = await startOrResumeApplication(owen.id, program.id, owenActor);
+  await submitApplication(owenApplication.id, owenActor);
+  await startReview(owenApplication.id, admissionsStaffActor);
+  await recordDecision(owenApplication.id, "ACCEPTED", "Ready to begin.", admissionsStaffActor);
+  await confirmOffer(owenApplication.id, owenActor);
+  await assignCohort(owenApplication.id, cohort.id, admissionsStaffActor);
+  await createEnrollmentFromApplication(owenApplication.id, admissionsStaffActor);
+
   console.log("Seed complete. Demo accounts (all use the same password):\n");
-  console.log(`  Administrator       admin@minara.edu`);
-  console.log(`  Faculty             faculty@minara.edu`);
-  console.log(`  Program Director    director@minara.edu`);
+  console.log(`  Administrator        admin@minara.edu`);
+  console.log(`  Faculty              faculty@minara.edu`);
+  console.log(`  Program Director     director@minara.edu`);
   console.log(`  Clinical Coordinator coordinator@minara.edu`);
-  console.log(`  Student             student@minara.edu`);
-  console.log(`  Student (Alumni)    graduate@minara.edu`);
+  console.log(`  Admissions Staff     admissions@minara.edu`);
+  console.log(`  Student              student@minara.edu`);
+  console.log(`  Student (Alumni)     graduate@minara.edu`);
+  console.log(`  Applicant (Draft)             devon@example.com`);
+  console.log(`  Applicant (Under Review)      uma@example.com`);
+  console.log(`  Applicant (Accepted)          ana@example.com`);
+  console.log(`  Applicant (Waitlisted)        wes@example.com`);
+  console.log(`  Applicant (Enrolled/Student)  owen@example.com`);
   console.log(`  Password (all)      ${DEMO_PASSWORD}\n`);
   console.log(
     "Lesson 1 now has two Versions — v1 (Published, completed by Sam Student before v2 existed) " +
@@ -510,6 +596,12 @@ async function main() {
       `externship Verified, and been carried through graduation review to an issued Certificate ` +
       `(credential ${certificate.credentialNumber}) — her Enrollment is now ALUMNI — demonstrating ` +
       "Milestone 16's full narrow slice out of the box.",
+  );
+  console.log(
+    "Owen Onboarded went through the full Admissions & Enrollment vertical slice — Application -> " +
+      "Submitted -> Under Review -> Accepted -> Confirmed -> Cohort-assigned -> Enrolled — and now has " +
+      "Student Portal access, demonstrating Milestone 17's full narrow slice out of the box. Devon, Uma, " +
+      "Ana, and Wes demonstrate the Draft/Under-Review/Accepted/Waitlisted states respectively.",
   );
   console.log("Assessment id for manual testing:", assessment.id);
 }

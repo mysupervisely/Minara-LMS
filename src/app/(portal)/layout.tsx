@@ -50,6 +50,17 @@ export default async function PortalLayout({ children }: { children: React.React
               { href: "/program-director/content", label: "Curriculum Review" },
               { href: "/program-director/externship", label: "Completion Verification" },
               { href: "/program-director/graduation", label: "Graduation Candidates" },
+              { href: "/program-director/admissions", label: "Admissions (View Only)" },
+            ]}
+          />
+        )}
+        {roles.includes("ADMISSIONS_STAFF") && (
+          <PortalNavSection
+            heading="Admissions"
+            links={[
+              { href: "/admissions", label: "Dashboard" },
+              { href: "/admissions/applications", label: "Applications" },
+              { href: "/admissions/requirements", label: "Requirements Queue" },
             ]}
           />
         )}
@@ -78,8 +89,18 @@ export default async function PortalLayout({ children }: { children: React.React
               { href: "/admin/users", label: "Users & Roles" },
               { href: "/admin/enrollments", label: "Enrollments" },
               { href: "/admin/audit", label: "Audit Log" },
+              { href: "/admissions", label: "Admissions" },
             ]}
           />
+        )}
+        {/* Milestone 17: an Applicant holds no Role Assignment at all —
+            "Applicant" is not a Role, per
+            src/services/admissions/admissions.ts's header comment. Shown
+            only when no other section above already applies, so a
+            Student who happens to have an old Application doesn't see a
+            redundant "Applicant" heading alongside their real Student nav. */}
+        {roles.length === 0 && (
+          <PortalNavSection heading="Applicant" links={[{ href: "/apply", label: "My Applications" }]} />
         )}
       </nav>
 

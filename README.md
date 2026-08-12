@@ -1,7 +1,7 @@
 # Minara-LMS
 
-**Status:** Milestones 10 (Foundation Build), 13 (Curriculum Delivery Vertical Slice), 14 (Content Versioning Vertical Slice), 15 (Externship Eligibility & Placement Vertical Slice), and 16 (Certificate & Graduation Vertical Slice) implemented · Milestone 11 (Curriculum Management & Content Engine) documentation drafted, pending approval
-**Last Updated:** 2026-08-11
+**Status:** Milestones 10 (Foundation Build), 13 (Curriculum Delivery Vertical Slice), 14 (Content Versioning Vertical Slice), 15 (Externship Eligibility & Placement Vertical Slice), 16 (Certificate & Graduation Vertical Slice), and 17 (Admissions & Enrollment Vertical Slice) implemented · Milestone 11 (Curriculum Management & Content Engine) documentation drafted, pending approval
+**Last Updated:** 2026-08-12
 
 ## What This Repository Is
 
@@ -133,6 +133,32 @@ for the full design and the
 [Implementation Completion Record](./docs/milestones/milestone-16-certificate-graduation-vertical-slice/07-implementation-completion-record.md)
 for exactly what was built.
 
+**Milestone 17 — Admissions & Enrollment Vertical Slice —
+implemented.** The first leg of the Student Lifecycle Workflow: a real
+prospective learner can now go from a public Program page, through
+self-service account creation (the platform's one deliberate exception
+to otherwise Administrator-provisioned accounts), an Application,
+Admissions Staff review, a Decision (Accept/Deny/Waitlist/Defer), offer
+confirmation, and Cohort assignment, to a real Enrollment created
+through Milestone 10's unmodified `createEnrollment` — the same User
+identity moving from Applicant to Student, never duplicated. Activates
+the already-declared `ADMISSIONS_STAFF` role (per `src/domain/roles.ts`,
+unchanged in shape since Milestone 10) rather than introducing a new
+one; Program Director admissions involvement stays read-only, per
+[Admissions Workflows](./docs/milestones/milestone-3-student-journey-core-workflows/03-admissions-workflows.md)'s
+own unresolved question about the exact Decision-authority split.
+Reuses the same approval-gate and audit patterns proven in Milestones
+10, 13, 14, 15, and 16. Deliberately excludes payments, financial aid,
+transcripts, background checks, document upload/OCR, and any invented
+Pharmacy Technology admission requirement — see
+[docs/milestones/milestone-17-admissions-enrollment-vertical-slice/](./docs/milestones/milestone-17-admissions-enrollment-vertical-slice/README.md)
+for the full design and the
+[Implementation Completion Record](./docs/milestones/milestone-17-admissions-enrollment-vertical-slice/08-implementation-completion-record.md)
+for exactly what was built. With Milestones 16 and 17 both implemented,
+the full Student Lifecycle Workflow — Admissions → Enrollment → Learning
+→ Assessment → Grade → Externship → Graduation → Alumni — is
+demonstrable end-to-end for the first time.
+
 ## Documentation
 
 All architecture and product documentation lives under [`docs/`](./docs).
@@ -154,6 +180,6 @@ Open [http://localhost:3000](http://localhost:3000). See
 for the full environment strategy this local setup implements.
 
 ```bash
-npm test                 # runs the Vitest suite (auth, RBAC, curriculum delivery, versioning, externship, and graduation/certificate workflow tests)
+npm test                 # runs the Vitest suite (auth, RBAC, curriculum delivery, versioning, externship, graduation/certificate, and admissions/enrollment workflow tests)
 npm run build             # production build
 ```

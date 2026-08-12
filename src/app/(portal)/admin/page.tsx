@@ -18,6 +18,7 @@ export default async function AdminOverviewPage() {
     placementCount,
     graduationRequestsAwaitingIssuance,
     certificatesIssued,
+    applicationsAwaitingAdmissions,
   ] = await Promise.all([
     db.institution.count(),
     db.program.count(),
@@ -28,6 +29,7 @@ export default async function AdminOverviewPage() {
     db.placement.count(),
     db.graduationRequest.count({ where: { status: "APPROVED" } }),
     db.certificate.count(),
+    db.application.count({ where: { status: { in: ["SUBMITTED", "UNDER_REVIEW"] } } }),
   ]);
 
   return (
@@ -54,6 +56,12 @@ export default async function AdminOverviewPage() {
           href="/admin/graduation"
         />
         <StatCard label="Certificates Issued" value={certificatesIssued} href="/admin/graduation" />
+        {/* Milestone 17 — Admissions & Enrollment Vertical Slice. Reuses
+            the Admissions Portal itself for Administrator oversight, the
+            same "administrator reaches another role's portal directly"
+            pattern Milestone 15's Clinical Sites/Placements cards above
+            already established. */}
+        <StatCard label="Applications Awaiting Admissions" value={applicationsAwaitingAdmissions} href="/admissions/applications" />
       </div>
     </div>
   );
