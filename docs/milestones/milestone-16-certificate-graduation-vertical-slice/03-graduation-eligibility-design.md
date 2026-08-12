@@ -75,6 +75,28 @@ There is no code path in `determineGraduationEligibility` that returns
 `eligible: true` by default, by omission, or by catching an error —
 every `true` traces to a real, positively-confirmed row in the database.
 
+## Disclosure Breakdown
+
+`determineGraduationEligibility` also returns a `breakdown:
+GraduationRequirementBreakdownItem[]` — one row per requirement area,
+each with a `status` of `PASSED`, `FAILED`, `NOT_APPLICABLE`, or
+`NEEDS_VERIFICATION`, and a human-readable `detail`. This exists purely
+for honest disclosure on the Student and Program Director screens; it
+does not change `eligible`'s computation in any way — `eligible` is
+still exactly `academicComplete AND (NOT externshipRequired OR
+externshipVerified)`, computed before the breakdown is assembled.
+
+| Row | Possible status | Why |
+|---|---|---|
+| Academic Requirements | `PASSED` / `FAILED` | Fully derivable from real `LessonCompletion`/`Submission`+`Grade` data — see above. |
+| Externship Requirement | `PASSED` / `FAILED` / `NOT_APPLICABLE` | `NOT_APPLICABLE` when `Program.requiresExternship` is `false`; otherwise `PASSED`/`FAILED` per the `VERIFIED` Placement check. |
+| Financial Clearance | Always `NOT_APPLICABLE` | This platform has no financial/billing system — nothing to evaluate, and it is never allowed to silently read as "passed." |
+| Other Program Requirements | Always `NEEDS_VERIFICATION` | No further Program-specific requirement (GPA, competencies, specific scores) has an authoritative source in this platform yet. Rendering this row keeps that gap visible to every reviewer rather than letting a blank space imply "nothing else applies." |
+
+`NOT_APPLICABLE` and `NEEDS_VERIFICATION` never block `eligible` and
+never satisfy it either — they exist solely so a reviewer never mistakes
+"this platform doesn't check that" for "that has been confirmed."
+
 ## Extension Point (Explicitly Not Built)
 
 The function returns a `missingRequirements: string[]` — human-readable,

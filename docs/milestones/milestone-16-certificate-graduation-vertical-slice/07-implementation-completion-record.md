@@ -132,6 +132,32 @@ future architecture) — **No new ADR required.**
    than establishing a new one, so it does not rise to a decision this
    project would need to formally record and revisit.
 
+## Follow-Up Verification Pass
+
+A second prompt restated this same milestone with a fuller specification
+(a granular eligibility-breakdown UX and a 25-point test list). Since the
+implementation described above already existed on this branch, this was
+treated as a verification-and-gap-closing pass rather than a rebuild.
+Two small, additive changes resulted:
+
+- `GraduationEligibilityResult` gained a `breakdown:
+  GraduationRequirementBreakdownItem[]` field — one row per requirement
+  area (Academic Requirements, Externship Requirement, Financial
+  Clearance, Other Program Requirements) with an explicit `PASSED` /
+  `FAILED` / `NOT_APPLICABLE` / `NEEDS_VERIFICATION` status, rendered as
+  a table on both the Student's and Program Director's eligibility
+  screens. `eligible`'s underlying computation is unchanged — the
+  breakdown is read-only disclosure, not a new gate. See
+  [Graduation Eligibility Design §Disclosure Breakdown](./03-graduation-eligibility-design.md#disclosure-breakdown).
+- Two tests added to `tests/certificate-graduation.test.ts` (now 21):
+  a non-externship-Program gate check, and a Clinical-Coordinator-cannot-
+  approve-graduation boundary check (distinct from the existing
+  cannot-issue-certificates check).
+
+No schema change, no new route, no new audit action, no RBAC change —
+this pass touched only `src/services/graduation/graduation.ts`'s return
+shape and two existing portal pages' rendering.
+
 ## Files NOT Modified (by design)
 
 `src/services/externship/externship.ts`, `src/services/gradebook/gradebook.ts`,

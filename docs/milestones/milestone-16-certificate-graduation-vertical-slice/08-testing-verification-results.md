@@ -6,7 +6,12 @@
 
 ## New Test Suite — `tests/certificate-graduation.test.ts`
 
-19 tests, in the same shape and rigor as
+21 tests (19 from the initial implementation pass, plus 2 added during a
+follow-up verification pass against a fuller restatement of this
+milestone's brief — a non-externship-Program gate check and a
+Coordinator-cannot-approve-graduation boundary check, both closing gaps
+the original 20-point list implied but did not separately enumerate), in
+the same shape and rigor as
 `tests/externship-management.test.ts` (Milestone 15) and
 `tests/content-versioning.test.ts` (Milestone 14): one full
 end-to-end integration test, plus focused tests for every point the
@@ -22,10 +27,12 @@ each assertion back to its point number.)
 | 2 | Not eligible without Verified externship (when required) | "2. is NOT eligible when the Program requires an externship and it has not been Verified" |
 | 3 | Externship gate passes once Verified | "3. the externship gate passes once the externship completion is Verified" |
 | 4 | Eligible once every requirement is met | "4. is eligible once every requirement is satisfied" |
+| 4b (follow-up) | A Program with `requiresExternship=false` never gates on externship | "4b. does not gate on externship completion for a Program with requiresExternship=false" |
 | 5 | Submission refused for an ineligible Student | "5. refuses to submit a Graduation Request for a Student who is not eligible" |
 | 6 | Program Director reviews within their own Program | "6. lets a Program Director review authorized Students within their own Program" |
 | 7 | Program Director denied another Program's Student | "7. denies a Program Director reviewing another Program's Student" |
 | 8 | Faculty cannot approve graduation | "8. denies Faculty approving graduation" |
+| 8b (follow-up) | Clinical Coordinator cannot approve graduation (distinct from cannot-issue-certificates) | "8b. denies a Clinical Coordinator approving graduation" |
 | 9 | Clinical Coordinator cannot issue certificates | "9. denies a Clinical Coordinator issuing certificates" |
 | 10 | Certificate cannot be issued before Approval | "10. refuses to issue a Certificate before the Graduation Request is Approved" |
 | 11–12 | Administrator issues after approval, correct audit event | "11-12. lets the Administrator issue a Certificate after approval, with the correct audit event" |
@@ -62,14 +69,36 @@ authorization pattern established in Milestone 15.
 
 ```
 Test Files  13 passed (13)
-     Tests  106 passed (106)
-  Duration  193.29s
+     Tests  108 passed (108)
+  Duration  201.37s
 ```
 
-Up from 87 passing tests pre-Milestone-16 (106 total including this
-milestone's 19 new tests). No existing test was modified in a way that
+Up from 87 passing tests pre-Milestone-16 (108 total including this
+milestone's 21 new tests). No existing test was modified in a way that
 changes its assertions — `tests/helpers/reset-db.ts` and
 `tests/helpers/fixtures.ts` were extended, not rewritten.
+
+### Eligibility breakdown, verified against real seeded data
+
+Beyond the automated suite, the disclosure `breakdown` (see
+[Graduation Eligibility Design](./03-graduation-eligibility-design.md))
+was verified directly against the real, freshly re-seeded `dev.db` for
+both demo Students:
+
+- **Sam Student** (deliberately incomplete — has not completed Lesson
+  1's current published Version, per Milestone 14's versioning demo):
+  `eligible: false`, `Academic Requirements: FAILED`, `Externship
+  Requirement: PASSED` (Sam's own externship was independently carried
+  to Verified in Milestone 15's seed), `Financial Clearance:
+  NOT_APPLICABLE`, `Other Program Requirements: NEEDS_VERIFICATION`.
+- **Gina Graduate** (the full-lifecycle demo Student):
+  `eligible: true`, `Academic Requirements: PASSED`, `Externship
+  Requirement: PASSED`, `Financial Clearance: NOT_APPLICABLE`, `Other
+  Program Requirements: NEEDS_VERIFICATION`.
+
+Confirms the breakdown never silently reports an unevaluated requirement
+as "passed," and that Sam Student continues to serve as this milestone's
+naturally-occurring incomplete-student failure-gate demonstration.
 
 ## TypeScript
 

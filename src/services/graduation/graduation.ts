@@ -73,12 +73,31 @@ function assertStudentOrOversight(actor: SessionUser, studentId: string, program
 
 // ── Graduation Eligibility (derived, fail-closed, never persisted) ──────
 
+/**
+ * The four states a single requirement row in the eligibility breakdown
+ * can be in — kept explicit and separate so that a requirement this
+ * platform has no authority to evaluate (e.g. Financial Clearance) can
+ * never be silently rendered as "passed." Only PASSED contributes to
+ * `eligible`; FAILED blocks it; NOT_APPLICABLE and NEEDS_VERIFICATION
+ * never block or silently satisfy it — they exist purely for honest
+ * disclosure to the reviewing Program Director/Administrator/Student.
+ */
+export type GraduationRequirementStatus = "PASSED" | "FAILED" | "NOT_APPLICABLE" | "NEEDS_VERIFICATION";
+
+export interface GraduationRequirementBreakdownItem {
+  label: string;
+  status: GraduationRequirementStatus;
+  detail: string;
+}
+
 export interface GraduationEligibilityResult {
   eligible: boolean;
   academicComplete: boolean;
   externshipRequired: boolean;
   externshipVerified: boolean;
   missingRequirements: string[];
+  /** Human-readable rows for the Student/Program Director eligibility screens — see this milestone's Graduation Eligibility Design doc for what each row does and does not claim. */
+  breakdown: GraduationRequirementBreakdownItem[];
 }
 
 /**
@@ -123,6 +142,13 @@ export async function determineGraduationEligibility(
       externshipRequired: false,
       externshipVerified: false,
       missingRequirements: ["No Enrollment found for this Student in this Program."],
+      breakdown: [
+        {
+          label: "Enrollment",
+          status: "FAILED",
+          detail: "No Enrollment found for this Student in this Program.",
+        },
+      ],
     };
   }
 
@@ -191,7 +217,49 @@ export async function determineGraduationEligibility(
 
   const eligible = academicComplete && (!externshipRequired || externshipVerified);
 
-  return { eligible, academicComplete, externshipRequired, externshipVerified, missingRequirements };
+  // The disclosure breakdown for portal screens. Only "Academic
+  // Requirements" and "Externship Requirement" can ever be PASSED/FAILED
+  // — both are fully derivable from real platform data. Financial
+  // Clearance and any further Program-specific requirement (GPA,
+  // competencies, specific evaluation scores) have no authoritative
+  // source in this platform yet, so they are always rendered as
+  // NOT_APPLICABLE/NEEDS_VERIFICATION — never assumed passed, and never
+  // allowed to block `eligible` either, since blocking on an invented
+  // threshold would be exactly the fabrication this milestone's brief
+  // prohibits. See docs/milestones/milestone-16-.../03-graduation-eligibility-design.md.
+  const breakdown: GraduationRequirementBreakdownItem[] = [
+    {
+      label: "Academic Requirements",
+      status: academicComplete ? "PASSED" : "FAILED",
+      detail: academicComplete
+        ? "Every published Lesson is completed and every published Assessment's Grade is Approved."
+        : "At least one published Lesson is not yet completed, or one published Assessment's Grade is not yet Approved.",
+    },
+    {
+      label: "Externship Requirement",
+      status: !externshipRequired ? "NOT_APPLICABLE" : externshipVerified ? "PASSED" : "FAILED",
+      detail: !externshipRequired
+        ? "This Program does not require an externship."
+        : externshipVerified
+          ? "Externship completion has been Verified by the Program Director."
+          : "This Program requires an externship, and completion has not yet been Verified.",
+    },
+    {
+      label: "Financial Clearance",
+      status: "NOT_APPLICABLE",
+      detail: "Not evaluated by this platform — outside this milestone's scope (see Known Limitations).",
+    },
+    {
+      label: "Other Program Requirements",
+      status: "NEEDS_VERIFICATION",
+      detail:
+        "No further Program-specific requirement (minimum GPA, specific competencies, specific evaluation " +
+        "scores) is defined in this platform yet — pending the authoritative curriculum source. Nothing is " +
+        "assumed passed.",
+    },
+  ];
+
+  return { eligible, academicComplete, externshipRequired, externshipVerified, missingRequirements, breakdown };
 }
 
 // ── Graduation Review Workflow ───────────────────────────────────────────

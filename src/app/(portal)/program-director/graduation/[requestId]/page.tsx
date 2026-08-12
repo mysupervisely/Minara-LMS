@@ -53,15 +53,38 @@ export default async function ProgramDirectorGraduationDetailPage({
 
       <section style={{ padding: 0, border: "none" }}>
         <h2>Requirements Supporting This Decision</h2>
-        <ul>
-          <li>Academic completion: {eligibility.academicComplete ? "Met" : "Not met"}</li>
-          <li>
-            Externship required: {eligibility.externshipRequired ? "Yes" : "No"}
-            {eligibility.externshipRequired
-              ? ` — Verified: ${eligibility.externshipVerified ? "Yes" : "No"}`
-              : ""}
-          </li>
-        </ul>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Requirement</th>
+                <th scope="col">Status</th>
+                <th scope="col">Detail</th>
+              </tr>
+            </thead>
+            <tbody>
+              {eligibility.breakdown.map((item) => (
+                <tr key={item.label}>
+                  <td>{item.label}</td>
+                  <td>
+                    <span
+                      className={`badge badge--${
+                        item.status === "PASSED"
+                          ? "approved"
+                          : item.status === "FAILED"
+                            ? "draft"
+                            : "submitted"
+                      }`}
+                    >
+                      {item.status === "NEEDS_VERIFICATION" ? "⚠️ NEEDS VERIFICATION" : item.status.replaceAll("_", " ")}
+                    </span>
+                  </td>
+                  <td>{item.detail}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
         {eligibility.missingRequirements.length > 0 ? (
           <p className="alert alert--error" role="alert">
             {eligibility.missingRequirements.join(" ")}

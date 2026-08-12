@@ -57,12 +57,40 @@ export default async function StudentGraduationPage() {
             ) : null}
 
             <h3>Eligibility</h3>
-            <ul>
-              <li>Academic completion: {eligibility.academicComplete ? "Complete" : "Not yet complete"}</li>
-              {eligibility.externshipRequired ? (
-                <li>Externship completion: {eligibility.externshipVerified ? "Verified" : "Not yet verified"}</li>
-              ) : null}
-            </ul>
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">Requirement</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Detail</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {eligibility.breakdown.map((item) => (
+                    <tr key={item.label}>
+                      <td>{item.label}</td>
+                      <td>
+                        <span
+                          className={`badge badge--${
+                            item.status === "PASSED"
+                              ? "approved"
+                              : item.status === "FAILED"
+                                ? "draft"
+                                : "submitted"
+                          }`}
+                        >
+                          {item.status === "NEEDS_VERIFICATION"
+                            ? "⚠️ NEEDS VERIFICATION"
+                            : item.status.replaceAll("_", " ")}
+                        </span>
+                      </td>
+                      <td>{item.detail}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
             {!eligibility.eligible && eligibility.missingRequirements.length > 0 ? (
               <div className="alert alert--error" role="alert">
                 <p>Outstanding requirements:</p>

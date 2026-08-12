@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { resetDatabase } from "./helpers/reset-db";
 import {
+  buildFullScenario,
   buildExternshipScenario,
   buildGraduationReadyScenario,
   completeAcademicWork,
@@ -164,6 +165,24 @@ describe("Certificate & Graduation Vertical Slice", () => {
       expect(eligibility.eligible).toBe(true);
     });
 
+    it("4b. does not gate on externship completion for a Program with requiresExternship=false", async () => {
+      const scenario = await buildFullScenario(); // requiresExternship defaults to false
+      await completeAcademicWork(scenario);
+      const programDirector = await actorFor(scenario.programDirector.id);
+
+      const eligibility = await determineGraduationEligibility(
+        scenario.student.id,
+        scenario.program.id,
+        programDirector,
+      );
+      expect(eligibility.externshipRequired).toBe(false);
+      expect(eligibility.externshipVerified).toBe(false);
+      expect(eligibility.eligible).toBe(true);
+      expect(eligibility.breakdown.find((b) => b.label === "Externship Requirement")?.status).toBe(
+        "NOT_APPLICABLE",
+      );
+    });
+
     it("19. fails closed when there is no Enrollment to evaluate at all", async () => {
       const scenario = await buildExternshipScenario();
       const stranger = await buildTestUser({ name: "No Enrollment Student" });
@@ -229,6 +248,15 @@ describe("Certificate & Graduation Vertical Slice", () => {
 
       const request = await submitForGraduationReview(scenario.student.id, scenario.program.id, programDirector);
       await expect(approveGraduation(request.id, faculty)).rejects.toThrow(GraduationAuthorizationError);
+    });
+
+    it("8b. denies a Clinical Coordinator approving graduation (their authority ends at Verified externship completion)", async () => {
+      const scenario = await buildGraduationReadyScenario();
+      const programDirector = await actorFor(scenario.programDirector.id);
+      const coordinator = await actorFor(scenario.coordinator.id);
+
+      const request = await submitForGraduationReview(scenario.student.id, scenario.program.id, programDirector);
+      await expect(approveGraduation(request.id, coordinator)).rejects.toThrow(GraduationAuthorizationError);
     });
 
     it("9. denies a Clinical Coordinator issuing certificates", async () => {
