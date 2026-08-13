@@ -19,6 +19,7 @@ export default async function AdminOverviewPage() {
     graduationRequestsAwaitingIssuance,
     certificatesIssued,
     applicationsAwaitingAdmissions,
+    chargesWithPayments,
   ] = await Promise.all([
     db.institution.count(),
     db.program.count(),
@@ -30,7 +31,16 @@ export default async function AdminOverviewPage() {
     db.graduationRequest.count({ where: { status: "APPROVED" } }),
     db.certificate.count(),
     db.application.count({ where: { status: { in: ["SUBMITTED", "UNDER_REVIEW"] } } }),
+    db.studentCharge.findMany({ select: { amountCents: true, payments: { select: { amountCents: true, status: true } } } }),
   ]);
+
+  // Milestone 18: balance is derived, never stored (see
+  // src/services/billing/billing.ts) — computed here the same way for a
+  // simple dashboard count.
+  const studentsWithOutstandingBalance = chargesWithPayments.filter((charge) => {
+    const paid = charge.payments.filter((p) => p.status === "SUCCEEDED").reduce((sum, p) => sum + p.amountCents, 0);
+    return charge.amountCents - paid > 0;
+  }).length;
 
   return (
     <div className="stack">
@@ -62,6 +72,8 @@ export default async function AdminOverviewPage() {
             pattern Milestone 15's Clinical Sites/Placements cards above
             already established. */}
         <StatCard label="Applications Awaiting Admissions" value={applicationsAwaitingAdmissions} href="/admissions/applications" />
+        {/* Milestone 18 — Tuition, Billing & Payments Vertical Slice. */}
+        <StatCard label="Charges With Outstanding Balance" value={studentsWithOutstandingBalance} href="/admin/billing" />
       </div>
     </div>
   );

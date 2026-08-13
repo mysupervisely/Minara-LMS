@@ -33,6 +33,7 @@ export default async function PortalLayout({ children }: { children: React.React
               { href: "/student/competencies", label: "My Competencies" },
               { href: "/student/externship", label: "My Externship" },
               { href: "/student/graduation", label: "Graduation & Certificate" },
+              { href: "/student/billing", label: "Billing & Payments" },
             ]}
           />
         )}
@@ -88,6 +89,7 @@ export default async function PortalLayout({ children }: { children: React.React
               { href: "/admin/graduation", label: "Certificate Issuance" },
               { href: "/admin/users", label: "Users & Roles" },
               { href: "/admin/enrollments", label: "Enrollments" },
+              { href: "/admin/billing", label: "Billing & Tuition" },
               { href: "/admin/audit", label: "Audit Log" },
               { href: "/admissions", label: "Admissions" },
             ]}

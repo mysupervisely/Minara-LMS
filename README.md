@@ -1,7 +1,7 @@
 # Minara-LMS
 
-**Status:** Milestones 10 (Foundation Build), 13 (Curriculum Delivery Vertical Slice), 14 (Content Versioning Vertical Slice), 15 (Externship Eligibility & Placement Vertical Slice), 16 (Certificate & Graduation Vertical Slice), and 17 (Admissions & Enrollment Vertical Slice) implemented · Milestone 11 (Curriculum Management & Content Engine) documentation drafted, pending approval
-**Last Updated:** 2026-08-12
+**Status:** Milestones 10 (Foundation Build), 13 (Curriculum Delivery Vertical Slice), 14 (Content Versioning Vertical Slice), 15 (Externship Eligibility & Placement Vertical Slice), 16 (Certificate & Graduation Vertical Slice), 17 (Admissions & Enrollment Vertical Slice), and 18 (Tuition, Billing & Payments Vertical Slice) implemented · Milestone 11 (Curriculum Management & Content Engine) documentation drafted, pending approval
+**Last Updated:** 2026-08-13
 
 ## What This Repository Is
 
@@ -159,6 +159,39 @@ the full Student Lifecycle Workflow — Admissions → Enrollment → Learning
 → Assessment → Grade → Externship → Graduation → Alumni — is
 demonstrable end-to-end for the first time.
 
+**Milestone 18 — Tuition, Billing & Payments Vertical Slice —
+implemented.** Replaces the disclosed `NEEDS_VERIFICATION` Financial
+Clearance placeholder Milestone 16's graduation eligibility breakdown
+left open with a real, derived, fail-closed signal. An Administrator
+configures tuition per Cohort (`TuitionConfiguration`) — a later rate
+change never retroactively affects a Student already charged, since
+`StudentCharge.amountCents` is frozen at creation time. When an accepted
+Applicant becomes Enrolled through Milestone 17's flow, a tuition Charge
+is created automatically (idempotent — a duplicate enrollment trigger,
+migration re-run, or browser refresh never produces a second Charge).
+The Student initiates payment through a clean `PaymentProviderAdapter`
+boundary (`MockPaymentProvider` standing in for a real provider — no
+production account exists in this environment, but the same interface
+would support one without changing any business rule in
+`src/services/billing/billing.ts`); payment confirmation is never trusted
+from a client-side redirect — it is confirmed only through a signed,
+HMAC-verified webhook (`POST /api/webhooks/payments`), idempotent against
+duplicate/retried delivery by three independent mechanisms. A Student's
+outstanding balance is always derived (charges minus successful
+payments), never a separately-maintained field. Financial Clearance
+(`PASSED`/`FAILED`/`NEEDS_VERIFICATION`) is read live by graduation
+eligibility, never copied into a graduation record; a real `FAILED`
+balance blocks graduation, while `NEEDS_VERIFICATION` (no tuition
+configured yet) deliberately does not, preserving every pre-existing
+Milestone 16 graduation test unmodified. No general ledger, no financial
+aid, no installment plans, no real payment-provider account, no
+hard-coded Pharmacy Technology tuition — the seeded $5,000.00 demo rate
+is explicitly labeled a demo value, never institutional policy — see
+[docs/milestones/milestone-18-tuition-billing-payments-vertical-slice/](./docs/milestones/milestone-18-tuition-billing-payments-vertical-slice/README.md)
+for the full design and the
+[Implementation Completion Record](./docs/milestones/milestone-18-tuition-billing-payments-vertical-slice/11-implementation-completion-record.md)
+for exactly what was built.
+
 ## Documentation
 
 All architecture and product documentation lives under [`docs/`](./docs).
@@ -180,6 +213,6 @@ Open [http://localhost:3000](http://localhost:3000). See
 for the full environment strategy this local setup implements.
 
 ```bash
-npm test                 # runs the Vitest suite (auth, RBAC, curriculum delivery, versioning, externship, graduation/certificate, and admissions/enrollment workflow tests)
+npm test                 # runs the Vitest suite (auth, RBAC, curriculum delivery, versioning, externship, graduation/certificate, admissions/enrollment, and tuition/billing/payments workflow tests)
 npm run build             # production build
 ```

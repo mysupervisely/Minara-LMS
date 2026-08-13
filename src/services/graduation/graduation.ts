@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import { db } from "@/lib/db";
 import { recordAuditEvent } from "@/services/audit/audit";
 import { hasRoleForProgram, isAdministrator } from "@/services/identity/rbac";
+import { determineFinancialClearance } from "@/services/billing/billing";
 import type { SessionUser } from "@/services/identity/session";
 
 /**
@@ -215,18 +216,37 @@ export async function determineGraduationEligibility(
     }
   }
 
-  const eligible = academicComplete && (!externshipRequired || externshipVerified);
+  // Milestone 18: replaces this function's previous hard-coded
+  // "Financial Clearance: NOT_APPLICABLE" placeholder with a real read
+  // from src/services/billing/billing.ts. This function never persists,
+  // recomputes independently, or duplicates any Charge/Payment fact —
+  // it reads determineFinancialClearance's own derived result directly,
+  // the same "read, never copy" discipline this function already
+  // applies to Placement.completionStatus above.
+  //
+  // NEEDS_VERIFICATION (no tuition ever configured/charged for this
+  // Enrollment) deliberately does NOT gate `eligible` — the same
+  // treatment "Other Program Requirements" already receives below, and
+  // precisely what keeps every graduation scenario built before
+  // Milestone 18 (which never created a Charge) passing unmodified. A
+  // real, positively-confirmed outstanding balance (FAILED) DOES gate
+  // `eligible` — the one new blocking condition this milestone adds.
+  // See docs/milestones/milestone-18-.../06-financial-clearance-design.md.
+  const financialClearance = await determineFinancialClearance(studentId, programId, actor);
+
+  const eligible =
+    academicComplete && (!externshipRequired || externshipVerified) && financialClearance.status !== "FAILED";
 
   // The disclosure breakdown for portal screens. Only "Academic
-  // Requirements" and "Externship Requirement" can ever be PASSED/FAILED
-  // — both are fully derivable from real platform data. Financial
-  // Clearance and any further Program-specific requirement (GPA,
-  // competencies, specific evaluation scores) have no authoritative
-  // source in this platform yet, so they are always rendered as
-  // NOT_APPLICABLE/NEEDS_VERIFICATION — never assumed passed, and never
-  // allowed to block `eligible` either, since blocking on an invented
-  // threshold would be exactly the fabrication this milestone's brief
-  // prohibits. See docs/milestones/milestone-16-.../03-graduation-eligibility-design.md.
+  // Requirements," "Externship Requirement," and (as of Milestone 18)
+  // "Financial Clearance" can ever be PASSED/FAILED — all three are
+  // fully derivable from real platform data. Any further Program-
+  // specific requirement (GPA, competencies, specific evaluation
+  // scores) has no authoritative source in this platform yet, so it is
+  // always rendered as NEEDS_VERIFICATION — never assumed passed, and
+  // never allowed to block `eligible` either, since blocking on an
+  // invented threshold would be exactly the fabrication this project's
+  // briefs prohibit. See docs/milestones/milestone-16-.../03-graduation-eligibility-design.md.
   const breakdown: GraduationRequirementBreakdownItem[] = [
     {
       label: "Academic Requirements",
@@ -246,8 +266,8 @@ export async function determineGraduationEligibility(
     },
     {
       label: "Financial Clearance",
-      status: "NOT_APPLICABLE",
-      detail: "Not evaluated by this platform — outside this milestone's scope (see Known Limitations).",
+      status: financialClearance.status,
+      detail: financialClearance.detail,
     },
     {
       label: "Other Program Requirements",

@@ -52,6 +52,7 @@ Minara-Master-Plan):
 | 15 | [Planning & Architecture Checkpoint, then Externship Eligibility & Placement Vertical Slice — Implementation](./milestones/milestone-15-externship-eligibility-placement-vertical-slice/README.md) | Implemented |
 | 16 | [Certificate & Graduation Vertical Slice](./milestones/milestone-16-certificate-graduation-vertical-slice/README.md) | Implemented |
 | 17 | [Admissions & Enrollment Vertical Slice](./milestones/milestone-17-admissions-enrollment-vertical-slice/README.md) | Implemented |
+| 18 | [Tuition, Billing & Payments Vertical Slice](./milestones/milestone-18-tuition-billing-payments-vertical-slice/README.md) | Implemented |
 
 Milestones 1–9 and the ADR foundation are documentation-only. Milestone 10
 is this repository's first implementation milestone — a working, tested
@@ -97,8 +98,21 @@ Decision → Acceptance Confirmation → Cohort assignment → Enrollment
 access. With Milestones 16 and 17 both implemented, the full Student
 Lifecycle Workflow (Admissions → Enrollment → Learning → Assessment →
 Grade → Externship → Graduation → Alumni) is demonstrable end-to-end for
-the first time. Implementation against the remainder of Milestone 11's
-full engine begins only after it, too, is reviewed and approved.
+the first time. Milestone 18 closes a gap Milestone 16 deliberately left
+open — its Financial Clearance graduation-breakdown row was a disclosed
+`NEEDS_VERIFICATION` placeholder — by implementing the smallest complete
+financial workflow: Tuition Configuration (per-Cohort, historical amounts
+preserved even after a later rate change) → Student Charge (created when
+an accepted Applicant becomes Enrolled, through Milestone 17's flow) →
+Payment (via a clean `PaymentProviderAdapter` boundary, a mock provider
+standing in for a real one, confirmed only through a signed,
+idempotency-guaranteed webhook, never a client-side redirect) → Balance
+→ Financial Clearance (a real, derived, fail-closed signal Milestone 16's
+graduation eligibility now reads instead of the placeholder) → Receipt →
+Audit Trail. Same application-code shape as 16/17 (implemented directly,
+`docs/milestones/` kept for the same permanent-record reason).
+Implementation against the remainder of Milestone 11's full engine
+begins only after it, too, is reviewed and approved.
 
 ## Architecture Decision Records
 

@@ -69,6 +69,19 @@
  * self-service account-creation path this milestone adds) — none of
  * Sam/Gina/the staff accounts above are touched.
  *
+ * Milestone 18 update: configures tuition for the Fall 2026 Cohort
+ * (after Owen already enrolled above, so Owen deliberately demonstrates
+ * the "no tuition ever configured for this Enrollment" NEEDS_VERIFICATION
+ * case), then seeds Beth Balance (Scenario A — enrolled, academically
+ * complete, tuition Charged, left unpaid — Financial Clearance FAILED,
+ * Graduation Eligibility blocked by it alone) and Paula Paid (Scenario B
+ * — the same walk, but paid in full through the real Payment/webhook-
+ * confirmation path — Financial Clearance PASSED, fully Graduation
+ * Eligible). The tuition amount used here is a generic, explicitly
+ * non-authoritative demo value — see this milestone's own ⚠️ Needs
+ * Verification document; nothing in this codebase treats it as real
+ * MIHS pricing.
+ *
  * Run with: npm run db:seed
  * Safe to re-run against an empty database; not idempotent against a
  * database that already has data (it will create duplicates or fail on
@@ -76,6 +89,7 @@
  * not a migration.
  */
 
+import { randomUUID } from "node:crypto";
 import { createUser, assignRole, registerApplicant } from "../src/services/identity/users";
 import {
   createInstitution,
@@ -123,6 +137,12 @@ import {
   assignCohort,
   createEnrollmentFromApplication,
 } from "../src/services/admissions/admissions";
+import {
+  configureTuition,
+  startPayment,
+  processPaymentWebhookPayload,
+} from "../src/services/billing/billing";
+import { signMockWebhookPayload } from "../src/services/billing/payment-provider";
 import { db } from "../src/lib/db";
 import type { SessionUser } from "../src/services/identity/session";
 
@@ -567,6 +587,87 @@ async function main() {
   await assignCohort(owenApplication.id, cohort.id, admissionsStaffActor);
   await createEnrollmentFromApplication(owenApplication.id, admissionsStaffActor);
 
+  // 10. Milestone 18's Tuition, Billing & Payments Vertical Slice.
+  // Tuition is configured for the Fall 2026 Cohort *after* Owen already
+  // enrolled above — Owen therefore has no Charge at all, demonstrating
+  // the "tuition never configured for this Enrollment" NEEDS_VERIFICATION
+  // financial-clearance case out of the box. This amount is a generic,
+  // explicitly non-authoritative demo value — see this milestone's own
+  // ⚠️ Needs Verification document; it is never treated as real MIHS
+  // pricing anywhere in this codebase.
+  await configureTuition(
+    { cohortId: cohort.id, amountCents: 500000, description: "Tuition — Fall 2026 Cohort (demo rate, not official pricing)" },
+    adminActor,
+  );
+
+  // Scenario A — Beth Balance: enrolled, academic work complete, tuition
+  // Charged, balance left outstanding. Financial Clearance reads FAILED,
+  // and Graduation Eligibility is blocked by it even though her academic
+  // work is otherwise complete — demonstrating Milestone 18's one new
+  // graduation-blocking condition out of the box.
+  const beth = await registerApplicant({ name: "Beth Balance", email: "beth@example.com", password: DEMO_PASSWORD });
+  const bethActor = await actorFor(beth.id);
+  const bethApplication = await startOrResumeApplication(beth.id, program.id, bethActor);
+  await submitApplication(bethApplication.id, bethActor);
+  await startReview(bethApplication.id, admissionsStaffActor);
+  await recordDecision(bethApplication.id, "ACCEPTED", "Ready to begin.", admissionsStaffActor);
+  await confirmOffer(bethApplication.id, bethActor);
+  await assignCohort(bethApplication.id, cohort.id, admissionsStaffActor);
+  await createEnrollmentFromApplication(bethApplication.id, admissionsStaffActor);
+  await markLessonComplete({ studentId: beth.id, lessonId: lesson1.id });
+  await markLessonComplete({ studentId: beth.id, lessonId: lesson2.id });
+  const bethSubmission = await submitAssessment({
+    assessmentId: assessment.id,
+    studentId: beth.id,
+    courseOfferingId: courseOffering.id,
+    content: "Therapeutic classification groups drugs by what condition they treat.",
+  });
+  const bethGrade = await enterGrade({ submissionId: bethSubmission.id, score: 88, enteredById: faculty.id });
+  await submitGradeForApproval(bethGrade.id, faculty.id);
+  await approveGrade(bethGrade.id, programDirector.id);
+  // Deliberately left unpaid — Beth's tuition Charge exists with its
+  // full balance outstanding.
+
+  // Scenario B — Paula Paid: the same walk as Beth, but her tuition is
+  // paid in full through the real Payment/webhook-confirmation path.
+  // Financial Clearance reads PASSED, and (since her academic work is
+  // also complete and this Program does not require an externship) she
+  // is fully graduation-eligible — left at ELIGIBLE rather than
+  // submitted, so a live Program Director/Administrator walkthrough can
+  // still submit -> approve -> issue her Certificate interactively.
+  const paula = await registerApplicant({ name: "Paula Paid", email: "paula@example.com", password: DEMO_PASSWORD });
+  const paulaActor = await actorFor(paula.id);
+  const paulaApplication = await startOrResumeApplication(paula.id, program.id, paulaActor);
+  await submitApplication(paulaApplication.id, paulaActor);
+  await startReview(paulaApplication.id, admissionsStaffActor);
+  await recordDecision(paulaApplication.id, "ACCEPTED", "Ready to begin.", admissionsStaffActor);
+  await confirmOffer(paulaApplication.id, paulaActor);
+  await assignCohort(paulaApplication.id, cohort.id, admissionsStaffActor);
+  const paulaEnrollment = await createEnrollmentFromApplication(paulaApplication.id, admissionsStaffActor);
+  await markLessonComplete({ studentId: paula.id, lessonId: lesson1.id });
+  await markLessonComplete({ studentId: paula.id, lessonId: lesson2.id });
+  const paulaSubmission = await submitAssessment({
+    assessmentId: assessment.id,
+    studentId: paula.id,
+    courseOfferingId: courseOffering.id,
+    content: "Therapeutic classification groups drugs by what condition they treat.",
+  });
+  const paulaGrade = await enterGrade({ submissionId: paulaSubmission.id, score: 95, enteredById: faculty.id });
+  await submitGradeForApproval(paulaGrade.id, faculty.id);
+  await approveGrade(paulaGrade.id, programDirector.id);
+
+  const paulaCharge = await db.studentCharge.findUniqueOrThrow({
+    where: { enrollmentId_category: { enrollmentId: paulaEnrollment.id, category: "TUITION" } },
+  });
+  const paulaPayment = await startPayment(paulaCharge.id, paulaActor);
+  const paulaWebhook = signMockWebhookPayload({
+    eventId: randomUUID(),
+    providerSessionId: paulaPayment.providerSessionId,
+    outcome: "SUCCEEDED",
+    amountCents: paulaCharge.amountCents,
+  });
+  await processPaymentWebhookPayload(paulaWebhook.rawBody, paulaWebhook.signature);
+
   console.log("Seed complete. Demo accounts (all use the same password):\n");
   console.log(`  Administrator        admin@minara.edu`);
   console.log(`  Faculty              faculty@minara.edu`);
@@ -580,6 +681,8 @@ async function main() {
   console.log(`  Applicant (Accepted)          ana@example.com`);
   console.log(`  Applicant (Waitlisted)        wes@example.com`);
   console.log(`  Applicant (Enrolled/Student)  owen@example.com`);
+  console.log(`  Student (Unpaid Balance)      beth@example.com`);
+  console.log(`  Student (Paid in Full)        paula@example.com`);
   console.log(`  Password (all)      ${DEMO_PASSWORD}\n`);
   console.log(
     "Lesson 1 now has two Versions — v1 (Published, completed by Sam Student before v2 existed) " +
@@ -602,6 +705,15 @@ async function main() {
       "Submitted -> Under Review -> Accepted -> Confirmed -> Cohort-assigned -> Enrolled — and now has " +
       "Student Portal access, demonstrating Milestone 17's full narrow slice out of the box. Devon, Uma, " +
       "Ana, and Wes demonstrate the Draft/Under-Review/Accepted/Waitlisted states respectively.",
+  );
+  console.log(
+    "Beth Balance is fully academically complete but has an outstanding tuition balance ($5,000.00, unpaid) " +
+      "— her Financial Clearance reads FAILED and Graduation Eligibility is blocked by it alone, demonstrating " +
+      "Milestone 18's one new graduation-blocking condition out of the box. Paula Paid is the same scenario, " +
+      "but her tuition has been paid in full through the real Payment/webhook-confirmation path — her " +
+      "Financial Clearance reads PASSED and she is fully Graduation Eligible (left unsubmitted, so a live " +
+      "Program Director/Administrator walkthrough can still submit -> approve -> issue her Certificate " +
+      "interactively). Both demonstrate Milestone 18's Tuition, Billing & Payments Vertical Slice out of the box.",
   );
   console.log("Assessment id for manual testing:", assessment.id);
 }

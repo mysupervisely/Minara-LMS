@@ -125,7 +125,18 @@ export type AuditAction =
   | "APPLICATION_COHORT_ASSIGNED"
   | "OFFER_CONFIRMED"
   | "OFFER_DECLINED"
-  | "ENROLLMENT_CREATED_FROM_APPLICATION";
+  | "ENROLLMENT_CREATED_FROM_APPLICATION"
+  // Milestone 18 — Tuition, Billing & Payments Vertical Slice. Extends
+  // this same union a seventh time rather than a parallel billing audit
+  // system, per this milestone's explicit instruction. Names follow the
+  // brief's own suggested list verbatim.
+  | "TUITION_CONFIGURED"
+  | "STUDENT_CHARGE_CREATED"
+  | "PAYMENT_STARTED"
+  | "PAYMENT_CONFIRMED"
+  | "PAYMENT_FAILED"
+  | "PAYMENT_REFUNDED"
+  | "FINANCIAL_CLEARANCE_CHANGED";
 
 export interface RecordAuditEventInput {
   /** The acting User's id, or null for a system-initiated event (e.g. a failed login for an unknown email). */

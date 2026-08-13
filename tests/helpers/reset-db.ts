@@ -27,6 +27,15 @@ export async function resetDatabase() {
   await db.clinicalSite.deleteMany();
   await db.externshipEligibility.deleteMany();
 
+  // Milestone 18 — Tuition, Billing & Payments Vertical Slice: Payment ->
+  // StudentCharge -> Enrollment/Cohort, so both must be cleared before
+  // enrollment.deleteMany() (immediately below) and cohort.deleteMany()
+  // (further below). TuitionConfiguration -> Cohort/User only, safe to
+  // clear anywhere before cohort/user.deleteMany().
+  await db.payment.deleteMany();
+  await db.studentCharge.deleteMany();
+  await db.tuitionConfiguration.deleteMany();
+
   await db.grade.deleteMany();
   await db.submission.deleteMany();
   await db.lessonCompletion.deleteMany();

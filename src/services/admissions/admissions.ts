@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { recordAuditEvent } from "@/services/audit/audit";
 import { hasRoleForProgram, isAdministrator, hasAnyRole } from "@/services/identity/rbac";
 import { createEnrollment } from "@/services/enrollment/enrollment";
+import { createChargeForEnrollment } from "@/services/billing/billing";
 import type { SessionUser } from "@/services/identity/session";
 
 /**
@@ -419,6 +420,17 @@ export async function createEnrollmentFromApplication(applicationId: string, act
     entityId: enrollment.id,
     metadata: { applicationId, applicantId: application.applicantId, programId: application.programId },
   });
+
+  // Milestone 18: "When an accepted applicant becomes an enrolled
+  // Student through the existing Milestone 17 flow, the appropriate
+  // tuition charge should be created according to the verified Program/
+  // Cohort configuration." Idempotent and a no-op if the Cohort has no
+  // TuitionConfiguration yet — see src/services/billing/billing.ts's
+  // createChargeForEnrollment. Enrollments created directly by an
+  // Administrator (the unmodified Milestone 10 path) are deliberately
+  // NOT charged here — this hook lives only in this Milestone 17 flow,
+  // per this milestone's own explicit framing.
+  await createChargeForEnrollment(enrollment.id, actor);
 
   return enrollment;
 }

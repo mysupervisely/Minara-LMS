@@ -30,7 +30,16 @@ import {
   submitCompletionForVerification,
   verifyCompletion,
 } from "@/services/externship/externship";
-import { startOrResumeApplication } from "@/services/admissions/admissions";
+import {
+  startOrResumeApplication,
+  submitApplication,
+  startReview,
+  recordDecision,
+  confirmOffer,
+  assignCohort,
+  createEnrollmentFromApplication,
+} from "@/services/admissions/admissions";
+import { configureTuition } from "@/services/billing/billing";
 
 /**
  * Test fixtures — deliberately built through the real service functions
@@ -260,6 +269,37 @@ export async function completeAcademicWork(
 }
 
 /**
+ * Milestone 18: the same academic-completion walk as completeAcademicWork
+ * above, generalized to an arbitrary studentId — needed because
+ * buildEnrolledApplicant's Student is a fresh self-registered Applicant,
+ * not the scenario's own pre-built `student`. completeAcademicWork itself
+ * is left untouched (still hardcodes scenario.student.id) so every
+ * existing Milestone 16 test that calls it keeps working unmodified.
+ */
+export async function completeAcademicWorkForStudent(
+  scenario: Awaited<ReturnType<typeof buildFullScenario>>,
+  studentId: string,
+) {
+  await markLessonComplete({ studentId, lessonId: scenario.lesson.id });
+
+  const submission = await submitAssessment({
+    assessmentId: scenario.assessment.id,
+    studentId,
+    courseOfferingId: scenario.courseOffering.id,
+    content: "A complete answer.",
+  });
+  const grade = await enterGrade({
+    submissionId: submission.id,
+    score: 90,
+    enteredById: scenario.faculty.id,
+  });
+  await submitGradeForApproval(grade.id, scenario.faculty.id);
+  await approveGrade(grade.id, scenario.programDirector.id);
+
+  return { submission, grade };
+}
+
+/**
  * Milestone 16: walks a `buildExternshipScenario` Student's Placement all
  * the way to a Program-Director-Verified Completion — the exact signal
  * determineGraduationEligibility reads directly, via the real Milestone
@@ -332,4 +372,48 @@ export async function startApplicationFor(scenario: Awaited<ReturnType<typeof bu
   const applicantActor = await actorFor(applicant.id);
   const application = await startOrResumeApplication(applicant.id, scenario.program.id, applicantActor);
   return { applicant, applicantActor, application };
+}
+
+/**
+ * Milestone 18 (Tuition, Billing & Payments Vertical Slice): configures
+ * tuition for a buildAdmissionsScenario's Cohort (Administrator-only,
+ * via the real configureTuition service function) — a generic,
+ * explicitly-non-authoritative test amount, per this milestone's own
+ * "do not hard-code Pharmacy Technology tuition" instruction.
+ */
+export async function configureTuitionForScenario(
+  scenario: Awaited<ReturnType<typeof buildAdmissionsScenario>>,
+  amountCents = 500000,
+) {
+  const admin = await actorFor(scenario.admin.id);
+  return configureTuition(
+    { cohortId: scenario.cohort.id, amountCents, description: "Test Tuition — not official pricing" },
+    admin,
+  );
+}
+
+/**
+ * Walks a fresh self-registered Applicant all the way through the real
+ * Milestone 17 flow (submit -> review -> accept -> confirm offer ->
+ * Cohort assignment -> Enrollment) to a real Enrollment — the exact path
+ * that triggers Milestone 18's createChargeForEnrollment hook. Returns
+ * the Enrollment plus (if tuition was configured for the Cohort before
+ * this ran) the resulting StudentCharge.
+ */
+export async function buildEnrolledApplicant(scenario: Awaited<ReturnType<typeof buildAdmissionsScenario>>) {
+  const { applicant, applicantActor, application } = await startApplicationFor(scenario);
+  const admissionsStaff = await actorFor(scenario.admissionsStaff.id);
+
+  await submitApplication(application.id, applicantActor);
+  await startReview(application.id, admissionsStaff);
+  await recordDecision(application.id, "ACCEPTED", null, admissionsStaff);
+  await confirmOffer(application.id, applicantActor);
+  await assignCohort(application.id, scenario.cohort.id, admissionsStaff);
+  const enrollment = await createEnrollmentFromApplication(application.id, admissionsStaff);
+
+  const charge = await db.studentCharge.findUnique({
+    where: { enrollmentId_category: { enrollmentId: enrollment.id, category: "TUITION" } },
+  });
+
+  return { applicant, applicantActor, application, enrollment, charge, admissionsStaff };
 }

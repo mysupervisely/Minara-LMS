@@ -7,7 +7,9 @@
 // Enrollment gains an "ALUMNI" status value, no schema change required), and
 // Milestone 17 (a narrow Admissions & Enrollment slice — Application,
 // ApplicationRequirement; Enrollment gains an additive, nullable
-// sourceApplicationId trace-back field).
+// sourceApplicationId trace-back field), and Milestone 18 (a narrow
+// Tuition, Billing & Payments slice — TuitionConfiguration, StudentCharge,
+// Payment).
 //
 // This schema implements a deliberately narrow subset of the domain model
 // documented in docs/milestones/milestone-5-domain-model-data-architecture/,
@@ -32,6 +34,10 @@
 // system — no document OCR, no external CRM integration, no financial aid/
 // payment processing, no background-check or immunization tracking, no
 // automated/AI acceptance decisions — per Milestone 17's own scope
+// boundaries. It is also NOT a full accounting/bursar/financial-aid system
+// — no general ledger, no financial aid/FAFSA/Title IV, no scholarships,
+// no payment plans/installments, no late fees/interest, no 1098-T tax
+// reporting, no refund-policy automation — per Milestone 18's own scope
 // boundaries.
 //
 // Database engine: SQLite for local development and this vertical slice's
@@ -125,6 +131,16 @@ model User {
   applicationsAsApplicant Application[]            @relation("ApplicationApplicant")
   applicationsDecided     Application[]            @relation("ApplicationDecidedBy")
   requirementsUpdated     ApplicationRequirement[] @relation("ApplicationRequirementUpdatedBy")
+
+  // Milestone 18 (Tuition, Billing & Payments Vertical Slice) — see the
+  // Billing bounded context below. Same named-relation pattern as every
+  // other bounded context above: one User can appear on the same
+  // TuitionConfiguration/StudentCharge/Payment row in more than one
+  // capacity.
+  tuitionConfigurationsCreated TuitionConfiguration[]
+  studentChargesAsStudent      StudentCharge[]        @relation("StudentChargeStudent")
+  paymentsAsStudent            Payment[]              @relation("PaymentStudent")
+  paymentsInitiated            Payment[]              @relation("PaymentInitiatedBy")
 
   @@map("users")
 }
@@ -236,6 +252,12 @@ model Program {
   // Application always targets exactly one Program.
   applications Application[]
 
+  // Milestone 18: denormalized onto StudentCharge directly (alongside
+  // enrollmentId) for the same single-indexed-query reason Milestone 15's
+  // Placement.programId already established — see the Billing bounded
+  // context below.
+  studentCharges StudentCharge[]
+
   @@map("programs")
 }
 
@@ -284,6 +306,13 @@ model Cohort {
   // — "the minimum needed to enroll an accepted applicant into an
   // available Cohort," no capacity-management engine).
   applications Application[]
+
+  // Milestone 18: the tuition *rate* for this specific Cohort — see the
+  // Billing bounded context below for why tuition is Cohort-scoped
+  // (preserving the "2026 Cohort vs. 2027 Cohort may charge different
+  // amounts" requirement) while the actual amount a Student is charged
+  // is frozen separately on StudentCharge.
+  tuitionConfiguration TuitionConfiguration?
 
   @@map("cohorts")
 }
@@ -464,6 +493,12 @@ model Enrollment {
   // history — see docs/milestones/milestone-17-.../07-enrollment-handoff.md.
   sourceApplicationId String?      @unique
   sourceApplication   Application? @relation(fields: [sourceApplicationId], references: [id])
+
+  // Milestone 18: at most one Tuition StudentCharge per Enrollment, ever
+  // — enforced by StudentCharge's own @@unique([enrollmentId, category]),
+  // not by a field here (an Enrollment could in principle carry more than
+  // one Charge category in the future, so this stays a plain relation).
+  studentCharges StudentCharge[]
 
   @@unique([studentId, programId])
   @@index([programId])
@@ -879,6 +914,113 @@ model ApplicationRequirement {
 
   @@index([applicationId])
   @@map("application_requirements")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Billing bounded context (Milestone 18 — Tuition, Billing & Payments
+// Vertical Slice). Deliberately NOT a general ledger: three narrow
+// models — a Cohort's current tuition rate, a Student's frozen-amount
+// Charge, and a Payment applied against it. All monetary amounts are
+// integer cents (never floating point), currency-tagged. No raw card
+// data is ever modeled or stored anywhere in this schema — see
+// docs/milestones/milestone-18-tuition-billing-payments-vertical-slice/04-charge-payment-domain-design.md.
+// ─────────────────────────────────────────────────────────────────────────
+
+// The tuition *rate* for one specific Cohort — one row per Cohort, at
+// most. Changing this row's amountCents only ever affects a future
+// Charge; every StudentCharge freezes its own amountCents at creation
+// time and is never recomputed from this row afterward (see
+// StudentCharge below) — this is the mechanism that satisfies "a
+// student's charge should not silently change because future tuition is
+// increased." Administrator-only to configure (institutional financial
+// policy, matching ADMINISTRATOR's institution-wide ROLE_SCOPE).
+model TuitionConfiguration {
+  id       String @id @default(cuid())
+  cohortId String @unique
+  cohort   Cohort @relation(fields: [cohortId], references: [id])
+
+  amountCents Int
+  currency    String  @default("USD")
+  description String?
+
+  createdById String
+  createdBy   User     @relation(fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("tuition_configurations")
+}
+
+// Money owed by a Student for a specific reason, tied to a specific
+// Enrollment. `category` exists so a future milestone could add e.g. an
+// application fee or lab fee without a schema change, but this milestone
+// only ever creates "TUITION" — see this milestone's own "do not build
+// every future fee type now" instruction.
+// `amountCents` is captured once, at creation, from the Cohort's
+// TuitionConfiguration at that moment — the historical fact of what this
+// Student was actually charged, immune to later rate changes.
+// `@@unique([enrollmentId, category])` is the database-level guarantee
+// against duplicate tuition charges: re-running an enrollment action can
+// never create a second TUITION charge for the same Enrollment.
+model StudentCharge {
+  id           String     @id @default(cuid())
+  enrollmentId String
+  enrollment   Enrollment @relation(fields: [enrollmentId], references: [id])
+  studentId    String
+  student      User       @relation("StudentChargeStudent", fields: [studentId], references: [id])
+  programId    String
+  program      Program    @relation(fields: [programId], references: [id])
+
+  category    String @default("TUITION")
+  description String
+  amountCents Int
+  currency    String @default("USD")
+
+  createdAt DateTime @default(now())
+
+  payments Payment[]
+
+  @@unique([enrollmentId, category])
+  @@index([studentId])
+  @@index([programId])
+  @@map("student_charges")
+}
+
+// A payment attempt/application against one StudentCharge. status:
+// PENDING -> SUCCEEDED | FAILED, or SUCCEEDED -> REFUNDED (schema-level
+// only in this milestone — no code path creates a REFUNDED row; see
+// this milestone's Known Limitations doc). `provider` names which
+// PaymentProviderAdapter processed this Payment (src/services/billing/
+// payment-provider.ts) — core billing logic never branches on this
+// value. `providerSessionId` is this Payment's own checkout-session
+// identifier (generated at PAYMENT_STARTED, unique, used to look the
+// Payment back up when a webhook arrives). `providerEventId` is the
+// specific confirmation event's identifier — its uniqueness is the
+// database-level idempotency guarantee against a duplicate/retried
+// webhook recording the same payment twice.
+model Payment {
+  id        String        @id @default(cuid())
+  chargeId  String
+  charge    StudentCharge @relation(fields: [chargeId], references: [id])
+  studentId String
+  student   User          @relation("PaymentStudent", fields: [studentId], references: [id])
+
+  amountCents Int
+  currency    String @default("USD")
+  status      String @default("PENDING")
+  provider    String @default("mock")
+
+  providerSessionId String  @unique
+  providerEventId   String? @unique
+
+  initiatedById String
+  initiatedBy   User      @relation("PaymentInitiatedBy", fields: [initiatedById], references: [id])
+  createdAt     DateTime  @default(now())
+  confirmedAt   DateTime?
+
+  @@index([chargeId])
+  @@index([studentId])
+  @@map("payments")
 }
 
 // ─────────────────────────────────────────────────────────────────────────
